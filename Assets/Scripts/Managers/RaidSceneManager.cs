@@ -263,6 +263,8 @@ public class RaidSceneManager : MonoBehaviour
         }
     }
 
+    #region Update
+
     protected virtual void Update()
     {
         if (Input.GetKeyUp(KeyCode.Escape))
@@ -272,99 +274,171 @@ public class RaidSceneManager : MonoBehaviour
             return;
 
         if (Input.GetKeyDown(KeyCode.D))
-        {
-            if (CurrentRaid.CurrentLocation != null && sceneState == DungeonSceneState.Hall && CurrentEvent == null &&
-                HallwayView.CurrentSector.Area.Type == AreaType.Obstacle && !PartyController.ForwardMovementAllowed)
-            {
-                if (!(HallwayView.CurrentSector.Prop as RaidObstacle).Removed)
-                {
-                    EncounterObstacle(HallwayView.CurrentSector);
-                }
-            }
-        }
+            OnDPressed();
 
-        if(Input.GetKeyDown(KeyCode.W))
-        {
-            if (BattleGround.BattleStatus == BattleStatus.Peace && CurrentRaid.CurrentLocation != null)
-            {
-                if(sceneState == DungeonSceneState.Hall)
-                {
-                    if (HallwayView.CurrentSector.Area.Type == AreaType.Curio)
-                    {
-                        if (!(HallwayView.CurrentSector.Prop as RaidCurio).Investigated)
-                        {
-                            ActivateCurio(HallwayView.CurrentSector);
-                        }
-                    }
-                    else if (HallwayView.CurrentSector.Area.Type == AreaType.Obstacle)
-                    {
-                        if (!(HallwayView.CurrentSector.Prop as RaidObstacle).Removed)
-                        {
-                            EncounterObstacle(HallwayView.CurrentSector);
-                        }
-                    }
-                    else if (HallwayView.CurrentSector.Area.Type == AreaType.Door)
-                        ActivateDoor(HallwayView.CurrentSector);
-                }  
-                else if (sceneState == DungeonSceneState.Room)
-                {
-                    if (RoomView.RaidRoom.Area.Type == AreaType.BattleCurio
-                        || RoomView.RaidRoom.Area.Type == AreaType.BattleTresure)
-                    {
-                        if (!(RoomView.RaidRoom.Prop as RaidCurio).Investigated)
-                        {
-                            ActivateCurio(RoomView.RaidRoom);
-                        }
-                    }
-                }
-            }
-        }
+        if (Input.GetKeyDown(KeyCode.W))
+            OnWPressed();
 
-        if(sceneState == DungeonSceneState.Room && CurrentEvent == null)
+        HandleCurrentState();
+    }
+
+    private void HandleCurrentState() // Not shure about name
+    {
+        if (sceneState != DungeonSceneState.Room || CurrentEvent != null) 
+            return;
+
+        UpdateInput input = ReadArrowsInput();
+        Direction direction = UpdateInputToDirection(input);
+
+        HandleDoorByInputAndDirection(direction);
+    }
+
+    private enum UpdateInput
+    {
+        None = 0,
+        Up = 1,
+        Right = 2,
+        Down = 3,
+        Left = 4
+    }
+
+    private UpdateInput ReadArrowsInput()
+    {
+        if (Input.GetKeyDown(KeyCode.UpArrow))
+            return UpdateInput.Up;
+
+        if (Input.GetKeyDown(KeyCode.DownArrow))
+            return UpdateInput.Down;
+
+        if (Input.GetKeyDown(KeyCode.LeftArrow))
+            return UpdateInput.Left;
+
+        if (Input.GetKeyDown(KeyCode.RightArrow))
+            return UpdateInput.Right;
+
+        return UpdateInput.None;
+    }
+
+    private Direction UpdateInputToDirection(UpdateInput input)
+    {
+        switch (input)
         {
-            if(Input.GetKeyDown(KeyCode.UpArrow))
-            {
-                Door door = (RoomView.RaidRoom.Area as DungeonRoom).Doors.Find(item => item.Direction == Direction.Top);
-                if (door != null)
-                {
-                    CurrentEvent = HallwayLoadingEvent(CurrentRaid.Dungeon.Hallways[door.TargetArea].Halls[0],
-                        HallTransitionType.FromRoom, Direction.Top, RoomView.RaidRoom.Area as DungeonRoom);
-                    StartCoroutine(CurrentEvent);
-                }
-            }
-            else if (Input.GetKeyDown(KeyCode.DownArrow))
-            {
-                Door door = (RoomView.RaidRoom.Area as DungeonRoom).Doors.Find(item => item.Direction == Direction.Bot);
-                if (door != null)
-                {
-                    CurrentEvent = HallwayLoadingEvent(CurrentRaid.Dungeon.Hallways[door.TargetArea].Halls[0],
-                        HallTransitionType.FromRoom, Direction.Bot, RoomView.RaidRoom.Area as DungeonRoom);
-                    StartCoroutine(CurrentEvent);
-                }
-            }
-            else if (Input.GetKeyDown(KeyCode.LeftArrow))
-            {
-                Door door = (RoomView.RaidRoom.Area as DungeonRoom).Doors.Find(item => item.Direction == Direction.Left);
-                if (door != null)
-                {
-                    CurrentEvent = HallwayLoadingEvent(CurrentRaid.Dungeon.Hallways[door.TargetArea].Halls[0],
-                        HallTransitionType.FromRoom, Direction.Left, RoomView.RaidRoom.Area as DungeonRoom);
-                    StartCoroutine(CurrentEvent);
-                }
-            }
-            else if (Input.GetKeyDown(KeyCode.RightArrow))
-            {
-                Door door = (RoomView.RaidRoom.Area as DungeonRoom).Doors.Find(item => item.Direction == Direction.Right);
-                if (door != null)
-                {
-                    CurrentEvent = HallwayLoadingEvent(CurrentRaid.Dungeon.Hallways[door.TargetArea].Halls[0],
-                        HallTransitionType.FromRoom, Direction.Right, RoomView.RaidRoom.Area as DungeonRoom);
-                    StartCoroutine(CurrentEvent);
-                }
-            }
+            case UpdateInput.Up:
+                return Direction.Top;
+            
+            case UpdateInput.Down:
+                return Direction.Bot;
+
+            case UpdateInput.Left:
+                return Direction.Left;
+            
+            case UpdateInput.Right:
+                return Direction.Right;
+
+            default: throw new ArgumentOutOfRangeException("input", input, null);
+        }
+    }
+    
+    private void HandleDoorByInputAndDirection(Direction direction)
+    {
+        Door door = ((DungeonRoom)RoomView.RaidRoom.Area).Doors.Find(item => item.Direction == direction);
+        if (door == null) 
+            return;
+                
+        CurrentEvent = HallwayLoadingEvent(CurrentRaid.Dungeon.Hallways[door.TargetArea].Halls[0],
+            HallTransitionType.FromRoom, direction, (DungeonRoom)RoomView.RaidRoom.Area);
+                
+        StartCoroutine(CurrentEvent);
+    }
+    
+    public void OnEscapePressed()
+    {
+        if (DarkestDungeonManager.MainMenu.gameObject.activeSelf)
+            DarkestDungeonManager.MainMenu.WindowClosed();
+        else
+            DarkestDungeonManager.MainMenu.OpenMenu();
+    }
+
+    private void OnDPressed()
+    {
+        bool canEncounterObstacle = !(CurrentRaid.CurrentLocation == null || sceneState != DungeonSceneState.Hall ||
+                                      CurrentEvent != null ||
+                                      HallwayView.CurrentSector.Area.Type != AreaType.Obstacle ||
+                                      PartyController.ForwardMovementAllowed);
+
+        bool isObstacleRemoved = ((RaidObstacle)HallwayView.CurrentSector.Prop).Removed;
+        
+        if (!canEncounterObstacle || isObstacleRemoved) 
+            return;
+        
+        EncounterObstacle(HallwayView.CurrentSector);
+    }
+
+    private void OnWPressed()
+    {
+        if (BattleGround.BattleStatus != BattleStatus.Peace || CurrentRaid.CurrentLocation == null) 
+            return;
+
+        switch (sceneState)
+        {
+            case DungeonSceneState.Hall:
+                OnWPressedHandleHallState();
+                break;
+            
+            case DungeonSceneState.Room:
+                OnWPressedHandleRoomState();
+                break;
+            
+            default: throw new ArgumentOutOfRangeException();
         }
     }
 
+    private void OnWPressedHandleHallState()
+    {
+        switch (HallwayView.CurrentSector.Area.Type)
+        {
+            case AreaType.Curio:
+            {
+                if (!((RaidCurio)HallwayView.CurrentSector.Prop).Investigated)
+                {
+                    ActivateCurio(HallwayView.CurrentSector);
+                }
+
+                break;
+            }
+            
+            case AreaType.Obstacle:
+            {
+                if (!((RaidObstacle)HallwayView.CurrentSector.Prop).Removed)
+                {
+                    EncounterObstacle(HallwayView.CurrentSector);
+                }
+
+                break;
+            }
+            
+            case AreaType.Door:
+                ActivateDoor(HallwayView.CurrentSector);
+                break;
+            
+            default: throw new ArgumentOutOfRangeException();
+        }
+    }
+
+    private void OnWPressedHandleRoomState()
+    {
+        if (RoomView.RaidRoom.Area.Type != AreaType.BattleCurio && RoomView.RaidRoom.Area.Type != AreaType.BattleTresure) 
+            return;
+
+        if (((RaidCurio)RoomView.RaidRoom.Prop).Investigated) 
+            return;
+        
+        ActivateCurio(RoomView.RaidRoom);
+    }
+    
+    #endregion
+    
+    
     #region Transitions
 
     public static Vector3 DungeonPositionToScreen(Vector3 position)
@@ -376,7 +450,7 @@ public class RaidSceneManager : MonoBehaviour
         return screenPoint;
     }
 
-    protected virtual IEnumerator ExecuteCampEffect(CampEffect currentEffect, FormationUnit target, bool skipNotification)
+    protected IEnumerator ExecuteCampEffect(CampEffect currentEffect, FormationUnit target, bool skipNotification)
     {
         switch (currentEffect.Type)
         {
@@ -477,7 +551,8 @@ public class RaidSceneManager : MonoBehaviour
         }
     }
 
-    protected virtual IEnumerator ExecuteCampEffectGroup(bool allowSkipping, float waitTime, List<FormationUnit> targets,  Predicate<CampEffectType> nextTypeSelector)
+    protected IEnumerator ExecuteCampEffectGroup(bool allowSkipping, float waitTime, List<FormationUnit> targets, 
+        Predicate<CampEffectType> nextTypeSelector)
     {
         bool skipNotification = false;
         CampEffect currentEffect = null;
@@ -1251,14 +1326,6 @@ public class RaidSceneManager : MonoBehaviour
         DarkestSoundManager.StopCampingSoundtrack();
         DarkestSoundManager.StopBattleSoundtrack();
         ResetExtraStackLimit();
-    }
-
-    public void OnEscapePressed()
-    {
-        if (DarkestDungeonManager.MainMenu.gameObject.activeSelf)
-            DarkestDungeonManager.MainMenu.WindowClosed();
-        else
-            DarkestDungeonManager.MainMenu.OpenMenu();
     }
 
     public virtual void NextRaidResultButtonClicked()
@@ -5993,10 +6060,12 @@ public class RaidSceneManager : MonoBehaviour
     protected void CharacterWindowNextButtonClicked()
     {
         var formationUnit = HeroParty.Units.Find(unit => unit.Character == CharacterWindow.CurrentHero);
+        
         if (formationUnit == null || HeroParty.Units.Count < 2)
             return;
 
         int unitIndex = HeroParty.Units.IndexOf(formationUnit) + 1;
+        
         if (unitIndex > HeroParty.Units.Count - 1)
             HeroCharacterWindowOpened(HeroParty.Units[0].OverlaySlot);
         else
@@ -6006,10 +6075,12 @@ public class RaidSceneManager : MonoBehaviour
     protected void CharacterWindowPreviousButtonClicked()
     {
         var formationUnit = HeroParty.Units.Find(unit => unit.Character == CharacterWindow.CurrentHero);
+        
         if (formationUnit == null || HeroParty.Units.Count < 2)
             return;
 
         int unitIndex = HeroParty.Units.IndexOf(formationUnit) - 1;
+        
         if (unitIndex < 0)
             HeroCharacterWindowOpened(HeroParty.Units[HeroParty.Units.Count - 1].OverlaySlot);
         else
@@ -6021,6 +6092,7 @@ public class RaidSceneManager : MonoBehaviour
         ResetExtraStackLimit();
 
         for (int i = 0; i < CurrentRaid.RaidParty.HeroInfo.Count; i++)
+        {
             if (CurrentRaid.RaidParty.HeroInfo[i].Hero.HeroClass.ExtraStackLimit != null)
             {
                 switch (CurrentRaid.RaidParty.HeroInfo[i].Hero.HeroClass.ExtraStackLimit)
@@ -6030,6 +6102,7 @@ public class RaidSceneManager : MonoBehaviour
                         break;
                 }
             }
+        }
     }
 
     private void ResetExtraStackLimit()
