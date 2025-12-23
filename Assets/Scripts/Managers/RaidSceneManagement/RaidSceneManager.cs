@@ -6,11 +6,6 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 
-public enum DungeonSceneState { Room, Hall }
-public enum StartingMode { Normal, EntranceEncounter, EntranceCurio }
-public enum RoomTransitionType { Entrance, FromHallway, PeacefulLoad, CombatLoad, Retreat, Teleport }
-public enum HallTransitionType { FromRoom, PeacefulLoad, CombatLoad, Retreat }
-
 public class RaidSceneManager : MonoBehaviour
 {
     public static RaidSceneManager Instanse { get; protected set; }
@@ -460,23 +455,28 @@ public class RaidSceneManager : MonoBehaviour
                 if(!skipNotification)
                     RaidEvents.ShowPopupMessage(target, PopupMessageType.Buff);
                 break;
+            
             case CampEffectType.HealthHealMaxHealthPercent:
                 int heal = target.Character.HealPercent(currentEffect.Amount, true);
                 RaidEvents.ShowPopupMessage(target, PopupMessageType.Heal, heal.ToString());
                 target.OverlaySlot.UpdateOverlay();
                 FMODUnity.RuntimeManager.PlayOneShot("event:/general/status/heal_ally");
                 break;
+            
             case CampEffectType.Loot:
                 RaidEvents.LoadSingleLoot(currentEffect.Subtype, (int)currentEffect.Amount);
                 if (RaidEvents.LootEvent.HasSomething)
                     yield return StartCoroutine(LootEvent());
                 break;
+            
             case CampEffectType.ReduceAmbushChance:
                 Raid.NightAmbushReduced = currentEffect.Amount;
                 break;
+            
             case CampEffectType.ReduceTorch:
                 TorchMeter.DecreaseTorch((int)currentEffect.Amount);
                 break;
+            
             case CampEffectType.RemoveBleed:
             case CampEffectType.RemovePoison:
                 if (currentEffect.Type == CampEffectType.RemoveBleed && target.Character[StatusType.Bleeding].IsApplied)
@@ -492,10 +492,12 @@ public class RaidSceneManager : MonoBehaviour
                         RaidEvents.ShowPopupMessage(target, PopupMessageType.Cured);
                 }
                 break;
+            
             case CampEffectType.RemoveDeathRecovery:
                 target.Character[StatusType.DeathRecovery].ResetStatus();
                 target.OverlaySlot.UpdateOverlay();
                 break;
+            
             case CampEffectType.RemoveDisease:
                 if (currentEffect.Type == CampEffectType.RemoveDisease)
                 {
@@ -509,11 +511,13 @@ public class RaidSceneManager : MonoBehaviour
                     }
                 }
                 break;
+            
             case CampEffectType.StressDamageAmount:
                 float initialDamage = currentEffect.Amount;
 
                 int damage = Mathf.RoundToInt(initialDamage * (1 +
                         target.Character.GetSingleAttribute(AttributeType.StressDmgReceivedPercent).ModifiedValue));
+                
                 if (damage < 1) damage = 1;
 
                 target.Character.Stress.IncreaseValue(damage);
@@ -533,6 +537,7 @@ public class RaidSceneManager : MonoBehaviour
                 target.SetHalo("afflicted");
                 yield return new WaitForSeconds(0.2f);
                 break;
+            
             case CampEffectType.StressHealAmount:
                 float initialStressHeal = currentEffect.Amount;
                 var hero = target.Character as Hero;
