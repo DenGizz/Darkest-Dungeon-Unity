@@ -9,7 +9,7 @@ using Managers.RaidSceneManagement.EffectsExecution;
 
 public class RaidSceneManager : MonoBehaviour
 {
-    protected static IEffectEventsExecutor _effectEventsExecutor;
+    private static IEffectEventsExecutor _effectEventsExecutor;
     
     public static RaidSceneManager Instanse { get; protected set; }
 
@@ -1626,16 +1626,7 @@ public class RaidSceneManager : MonoBehaviour
     #endregion
 
     #region Battle and Hero Events
-
-    public virtual void SummonPurging(FormationUnit targetUnit)
-    {
-        targetUnit.SetSortingOrder(4);
-        PrepareDeath(targetUnit);
-        UnitEventQueue.RemoveAll(item => item == targetUnit);
-        BattleGround.UnitDestroyed(targetUnit);
-        Formations.Monsters.DeleteUnitDelayed(targetUnit, 1.867f);
-    }
-
+    
     public virtual void AddResolveCheck(FormationUnit unit)
     {
         if (!ResolveCheckQueue.Contains(unit))
@@ -1648,100 +1639,8 @@ public class RaidSceneManager : MonoBehaviour
             HeartAttackCheckQueue.Add(unit);
     }
 
-    private bool PrepareDeath(FormationUnit targetUnit, DeathFactor deathFactor = DeathFactor.AttackMonster, FormationUnit killer = null)
-    {
-        if (targetUnit.Character.IsMonster)
-        {
-            if (targetUnit.CombatInfo.IsDead)
-                return true;
-            if (targetUnit.Character.DeathClass != null &&
-                targetUnit.Character.DeathClass.CanDieFromDamage == false)
-                return false;
 
-            targetUnit.CombatInfo.IsDead = true;
-
-            Monster monster = targetUnit.Character as Monster;
-
-            if (BattleGround.SharedHealth.IsActive)
-                if (BattleGround.SharedHealth.SharedUnits.Contains(targetUnit))
-                    for (int i = 0; i < BattleGround.SharedHealth.SharedUnits.Count; i++)
-                        if (BattleGround.SharedHealth.SharedUnits[i].CombatInfo.IsDead == false)
-                            PrepareDeath(BattleGround.SharedHealth.SharedUnits[i]);
-
-            if (monster.Data.FullCaptor != null &&
-                BattleGround.Captures.Find(capture => capture.CaptorUnit == targetUnit) != null)
-            {
-                targetUnit.SetReleaseAnimation(true);
-                targetUnit.SetDefendAnimation(false);
-            }
-            else if (monster.Types.Contains(MonsterType.Corpse))
-                targetUnit.SetCorpseKillAnimation(true);
-            else
-                targetUnit.SetDeathAnimation(true);
-
-            if (monster.Data.FullCaptor != null)
-                FMODUnity.RuntimeManager.PlayOneShot("event:/general/char/death_enemy");
-
-            FMODUnity.RuntimeManager.PlayOneShot("event:/char/enemy/" + monster.Data.TypeId + "_vo_death");
-
-            if (!monster.MonsterTypes.Contains(MonsterType.Corpse))
-                DarkestSoundManager.ExecuteNarration("kill_monster", NarrationPlace.Raid,
-                monster.Class, monster.Size > 1 ? "strong" : "weak", monster.Size > 1 ? "big" : "small",
-                (deathFactor == DeathFactor.BleedMonster || deathFactor == DeathFactor.PoisonMonster) ? "dot" : "one_shot");
-
-            if (monster.Data.FullCaptor == null)
-            {
-                GameObject deathFx = Instantiate(Resources.Load("Prefabs/Effects/" +
-                    monster.CommonEffects.DeathEffect) as GameObject);
-                AnimatedEffect effect = deathFx.GetComponent<AnimatedEffect>();
-                effect.gameObject.layer = targetUnit.CurrentState.gameObject.layer;
-                effect.BindToTarget(targetUnit, targetUnit.SkeletonAnimations[1], "fxdeath");
-            }
-
-            targetUnit.ResetHalo();
-            targetUnit.OverlaySlot.Hide();
-            return true;
-        }
-        else
-        {
-            if (targetUnit.CombatInfo.IsDead)
-                return true;
-
-            Hero hero = targetUnit.Character as Hero;
-            if (hero.AtDeathsDoor || targetUnit.CombatInfo.MarkedForDeath)
-            {
-                if (RandomSolver.CheckSuccess(hero.DeathResist) && !targetUnit.CombatInfo.MarkedForDeath)
-                    return false;
-                targetUnit.SetDeathAnimation(true);
-                FMODUnity.RuntimeManager.PlayOneShot("event:/general/char/death_ally");
-
-                var captureRecord = BattleGround.Captures.Find(capture => capture.PrisonerUnit == targetUnit);
-                if (captureRecord != null)
-                {
-                    captureRecord.CaptorUnit.SetReleaseAnimation(true);
-                    captureRecord.CaptorUnit.SetDefendAnimation(false);
-                }
-
-                GameObject deathFx = Instantiate(Resources.Load("Prefabs/Effects/death_medium") as GameObject);
-                AnimatedEffect effect = deathFx.GetComponent<AnimatedEffect>();
-                effect.gameObject.layer = targetUnit.CurrentState.gameObject.layer;
-                effect.BindToTarget(targetUnit, targetUnit.SkeletonAnimations[1], "fxdeath");
-                targetUnit.ResetHalo();
-                targetUnit.CombatInfo.IsDead = true;
-                targetUnit.OverlaySlot.Hide();
-
-                DarkestSoundManager.ExecuteNarration("kill_hero", NarrationPlace.Raid);
-                return true;
-            }
-            else
-            {
-                DeathDoorEnterQueue.Add(targetUnit);
-                return false;
-            }
-        }
-    }
-
-    protected bool ProcessDamage(FormationUnit unit, int damage)
+    private bool ProcessDamage(FormationUnit unit, int damage)
     {
         unit.Character.TakeDamage(damage);
         unit.OverlaySlot.UpdateOverlay();
@@ -1751,7 +1650,7 @@ public class RaidSceneManager : MonoBehaviour
         else
         {
             bool atDeathDoor = unit.Character.AtDeathsDoor;
-            bool isDead = PrepareDeath(unit);
+            bool isDead = _effectEventsExecutor.PrepareDeath(unit);
 
             RaidEvents.ShowPopupMessage(unit, atDeathDoor ? (isDead ? PopupMessageType.DeathBlow :
                 PopupMessageType.DeathsDoor) : PopupMessageType.Damage, damage.ToString());
@@ -1822,7 +1721,7 @@ public class RaidSceneManager : MonoBehaviour
         yield return new WaitForSeconds(waitBefore);
 
         for (int i = HeroParty.Units.Count - 1; i >= 0; i--)
-            _effectEventsExecutor.ExecuteDeath(HeroParty.Units[i]);
+            _effectEventsExecutor.ExecuteDeathAsync(HeroParty.Units[i]);
 
         yield return new WaitForSeconds(waitAfter);
 
@@ -1844,7 +1743,7 @@ public class RaidSceneManager : MonoBehaviour
                 continue;
 
             SkillTargetInfo targetInfo = BattleSolver.SelectSkillTargets(unit, unit, skill).UpdateSkillInfo(unit, skill);
-            yield return StartCoroutine(ExecuteHeroSkill(unit, targetInfo, skill));
+            yield return StartCoroutine(_effectEventsExecutor.ExecuteHeroSkillAsync(unit, targetInfo, skill));
         }
     }
 
@@ -2253,7 +2152,7 @@ public class RaidSceneManager : MonoBehaviour
                 {
                     if (TempList[i].Character.LifeTime.AliveRoundLimit <= TempList[i].CombatInfo.RoundsAlive)
                     {
-                        PrepareDeath(TempList[i]);
+                        _effectEventsExecutor.PrepareDeath(TempList[i]);
                         someoneExpired = true;
                     }
                 }
@@ -2264,7 +2163,7 @@ public class RaidSceneManager : MonoBehaviour
                     for (int i = 0; i < TempList.Count; i++)
                     {
                         if (TempList[i].CombatInfo.IsDead)
-                            _effectEventsExecutor.ExecuteDeath(TempList[i]);
+                            _effectEventsExecutor.ExecuteDeathAsync(TempList[i]);
                     }
                 }
                 TempList.Clear();
@@ -2455,12 +2354,12 @@ public class RaidSceneManager : MonoBehaviour
                         }
                         else
                         {
-                            if (PrepareDeath(BattleGround.Captures[i].PrisonerUnit))
+                            if (_effectEventsExecutor.PrepareDeath(BattleGround.Captures[i].PrisonerUnit))
                             {
                                 RaidEvents.ShowPopupMessage(BattleGround.Captures[i].PrisonerUnit, PopupMessageType.DeathBlow);
                                 yield return new WaitForSeconds(1.4f);
                                 BattleGround.Round.PostHeroTurn();
-                                _effectEventsExecutor.ExecuteDeath(BattleGround.Captures[i].PrisonerUnit);
+                                _effectEventsExecutor.ExecuteDeathAsync(BattleGround.Captures[i].PrisonerUnit);
                                 yield break;
                             }
                             else
@@ -2584,9 +2483,9 @@ public class RaidSceneManager : MonoBehaviour
                         if (monster.Data.LifeLink != null &&
                             !BattleGround.IsLifeLinked(BattleGround.MonsterParty.Units[i], monster.Data.LifeLink))
                         {
-                            PrepareDeath(BattleGround.MonsterParty.Units[i]);
+                            _effectEventsExecutor.PrepareDeath(BattleGround.MonsterParty.Units[i]);
                             yield return new WaitForSeconds(1.2f);
-                            _effectEventsExecutor.ExecuteDeath(BattleGround.MonsterParty.Units[i]);
+                            _effectEventsExecutor.ExecuteDeathAsync(BattleGround.MonsterParty.Units[i]);
                             yield return new WaitForSeconds(0.3f);
                         }
                     }
@@ -2660,7 +2559,7 @@ public class RaidSceneManager : MonoBehaviour
                 }
                 else
                 {
-                    PrepareDeath(idleUnit);
+                    _effectEventsExecutor.PrepareDeath(idleUnit);
                     hasIdleDeath = true;
                 }
             }
@@ -2680,7 +2579,7 @@ public class RaidSceneManager : MonoBehaviour
                 }
                 else
                 {
-                    PrepareDeath(idleUnit);
+                    _effectEventsExecutor.PrepareDeath(idleUnit);
                     hasIdleDeath = true;
                 }
             }
@@ -2708,7 +2607,7 @@ public class RaidSceneManager : MonoBehaviour
         {
             yield return new WaitForSeconds(1.4f);
             for (int i = 0; i < TempList.Count; i++)
-                _effectEventsExecutor.ExecuteDeath(TempList[i]);
+                _effectEventsExecutor.ExecuteDeathAsync(TempList[i]);
             yield return new WaitForSeconds(0.2f);
         }
         else if (hasIdleDamage)
@@ -2741,7 +2640,7 @@ public class RaidSceneManager : MonoBehaviour
                 {
                     yield return new WaitForSeconds(1.4f);
                     BattleGround.Round.PostHeroTurn();
-                    _effectEventsExecutor.ExecuteDeath(actionUnit);
+                    _effectEventsExecutor.ExecuteDeathAsync(actionUnit);
                     yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(true));
                     yield break;
                 }
@@ -2759,7 +2658,7 @@ public class RaidSceneManager : MonoBehaviour
                 {
                     yield return new WaitForSeconds(1.4f);
                     BattleGround.Round.PostHeroTurn();
-                    _effectEventsExecutor.ExecuteDeath(actionUnit);
+                    _effectEventsExecutor.ExecuteDeathAsync(actionUnit);
                     yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(true));
                     yield break;
                 }
@@ -2843,7 +2742,7 @@ public class RaidSceneManager : MonoBehaviour
                             yield return new WaitForSeconds(0.1f);
                             FMODUnity.RuntimeManager.PlayOneShot("event:/general/status/bleed_dot");
 
-                            if (PrepareDeath(actionUnit))
+                            if (_effectEventsExecutor.PrepareDeath(actionUnit))
                                 RaidEvents.ShowPopupMessage(actionUnit, PopupMessageType.DeathBlow);
                             else
                                 RaidEvents.ShowPopupMessage(actionUnit, PopupMessageType.DeathsDoor);
@@ -2852,7 +2751,7 @@ public class RaidSceneManager : MonoBehaviour
                             {
                                 yield return new WaitForSeconds(1.4f);
                                 BattleGround.Round.PostHeroTurn();
-                                _effectEventsExecutor.ExecuteDeath(actionUnit);
+                                _effectEventsExecutor.ExecuteDeathAsync(actionUnit);
                                 yield break;
                             }
                             else
@@ -2873,7 +2772,7 @@ public class RaidSceneManager : MonoBehaviour
                             RaidEvents.ShowPopupMessage(actionUnit, PopupMessageType.Damage, damageAmount.ToString());
 
                             if (actionUnit.Character.HasZeroHealth)
-                                PrepareDeath(actionUnit);
+                                _effectEventsExecutor.PrepareDeath(actionUnit);
 
                             yield return new WaitForSeconds(0.5f);
                             actionUnit.SetDefendAnimation(false);
@@ -3021,7 +2920,7 @@ public class RaidSceneManager : MonoBehaviour
                             {
                                 SkillTargetInfo targetInfo = BattleSolver.SelectSkillTargets(actionUnit, brainDesicion.TargetInfo.Targets[0],
                                     brainDesicion.SelectedSkill).UpdateSkillInfo(actionUnit, brainDesicion.SelectedSkill);
-                                yield return StartCoroutine(ExecuteHeroSkill(actionUnit, targetInfo, brainDesicion.SelectedSkill));
+                                yield return StartCoroutine(_effectEventsExecutor.ExecuteHeroSkillAsync(actionUnit, targetInfo, brainDesicion.SelectedSkill));
                             }
 
                             if (brainDesicion.SelectedSkill.IsContinueTurn)
@@ -3208,7 +3107,7 @@ public class RaidSceneManager : MonoBehaviour
                         }
                         #endregion
 
-                        yield return StartCoroutine(ExecuteHeroSkill(actionUnit, targetInfo, usedCombatSkill));
+                        yield return StartCoroutine(_effectEventsExecutor.ExecuteHeroSkillAsync(actionUnit, targetInfo, usedCombatSkill));
 
                         if (usedCombatSkill.IsContinueTurn)
                         {
@@ -3373,7 +3272,7 @@ public class RaidSceneManager : MonoBehaviour
                     DeathDamage deathDamage = actionUnit.Character.DeathDamage;
                     yield return new WaitForSeconds(1.4f);
                     BattleGround.Round.PostMonsterTurn();
-                    _effectEventsExecutor.ExecuteDeath(actionUnit);
+                    _effectEventsExecutor.ExecuteDeathAsync(actionUnit);
 
                     if (ProcessDeathDamage(deathDamage))
                         yield return new WaitForSeconds(0.4f);
@@ -3395,7 +3294,7 @@ public class RaidSceneManager : MonoBehaviour
                     DeathDamage deathDamage = actionUnit.Character.DeathDamage;
                     yield return new WaitForSeconds(1.4f);
                     BattleGround.Round.PostMonsterTurn();
-                    _effectEventsExecutor.ExecuteDeath(actionUnit);
+                    _effectEventsExecutor.ExecuteDeathAsync(actionUnit);
 
                     if (ProcessDeathDamage(deathDamage))
                         yield return new WaitForSeconds(0.4f);
@@ -3491,365 +3390,9 @@ public class RaidSceneManager : MonoBehaviour
 
     #region Skill Usage
 
-    private void ExecuteSkillInstants(FormationUnit performer, SkillTargetInfo targetInfo, SkillResult skillResult)
-    {
-        foreach (var skillEntry in skillResult.SkillEntries)
-        {
-            if (skillEntry.IsTargetHit)
-                skillEntry.Target.SetTargetSkillEffect(targetInfo.SkillArtInfo, performer);
 
-            skillEntry.Target.OverlaySlot.UpdateOverlay();
 
-            if (targetInfo.Type == SkillTargetType.Enemy && skillEntry.Target.Character.AtDeathsDoor)
-            {
-                if (PrepareDeath(skillEntry.Target))
-                {
-                    RaidEvents.ShowPopupMessage(skillEntry.Target, PopupMessageType.DeathBlow);
-                }
-                else
-                {
-                    RaidEvents.ShowPopupMessage(skillEntry.Target, PopupMessageType.DeathsDoor);
-                }
-            }
-            else
-            {
-                switch (skillEntry.Type)
-                {
-                    case SkillResultType.Miss:
-                        RaidEvents.ShowPopupMessage(skillEntry.Target, PopupMessageType.Miss);
-                        break;
-                    case SkillResultType.Dodge:
-                        RaidEvents.ShowPopupMessage(skillEntry.Target, PopupMessageType.Dodge);
-                        break;
-                    case SkillResultType.Hit:
-                        if (performer.Character.IsMonster && targetInfo.Skill.DamageMax == 0)
-                            break;
-                        if (!performer.Character.IsMonster && targetInfo.Skill.DamageMod == -1)
-                            break;
 
-                        RaidEvents.ShowPopupMessage(skillEntry.Target, PopupMessageType.Damage, skillEntry.Amount.ToString());
-                        break;
-                    case SkillResultType.Crit:
-                        if (performer.Character.IsMonster && targetInfo.Skill.DamageMax == 0)
-                            break;
-                        if (!performer.Character.IsMonster && targetInfo.Skill.DamageMod == -1)
-                            break;
-
-                        RaidEvents.ShowPopupMessage(skillEntry.Target, PopupMessageType.CritDamage, skillEntry.Amount.ToString());
-                        break;
-                    case SkillResultType.Heal:
-                        RaidEvents.ShowPopupMessage(skillEntry.Target, PopupMessageType.Heal, skillEntry.Amount.ToString());
-                        FMODUnity.RuntimeManager.PlayOneShot("event:/general/status/heal_ally");
-                        break;
-                    case SkillResultType.CritHeal:
-                        RaidEvents.ShowPopupMessage(skillEntry.Target, PopupMessageType.CritHeal, skillEntry.Amount.ToString());
-                        FMODUnity.RuntimeManager.PlayOneShot("event:/general/status/heal_ally_crit");
-                        break;
-                }
-
-                if (skillEntry.IsTargetHit && skillEntry.Target.Character.SkillReaction != null &&
-                    skillEntry.Target.Character.SkillReaction.WasHitPerformerEffects.Count > 0)
-                {
-                    for (int i = 0; i < skillEntry.Target.Character.SkillReaction.WasHitPerformerEffects.Count; i++)
-                        for (int j = 0; j < skillEntry.Target.Character.SkillReaction.WasHitPerformerEffects[i].SubEffects.Count; j++)
-                            skillEntry.Target.Character.SkillReaction.WasHitPerformerEffects[i].SubEffects[j].Apply(skillEntry.Target,
-                                performer, skillEntry.Target.Character.SkillReaction.WasHitPerformerEffects[i]);
-                }
-
-                if (skillEntry.Target.Character.IsMonster && skillEntry.Target.Character.HasZeroHealth)
-                    PrepareDeath(skillEntry.Target);
-                else if (skillEntry.Target.Character.IsMonster == false && skillEntry.Target.Character.AtDeathsDoor == false)
-                    if (skillEntry.Target.Character.HasZeroHealth)
-                        PrepareDeath(skillEntry.Target);
-            }
-        }
-
-        for(int i = 0; i < BattleGround.MonsterParty.Units.Count; i++)
-            if (BattleGround.MonsterParty.Units[i].CombatInfo.MarkedForDeath)
-                PrepareDeath(BattleGround.MonsterParty.Units[i]);
-
-        performer.OverlaySlot.UpdateOverlay();
-    }
-
-    private void ExecuteSlidingSetup(FormationUnit performer, SkillTargetInfo targetInfo)
-    {
-        if(performer.Team == Team.Monsters)
-        {
-            if (targetInfo.Type == SkillTargetType.Party)
-                Formations.PartyBuffPositions.SetSpacing(120, 1f);
-            else if (targetInfo.Type == SkillTargetType.Enemy)
-            {
-                if (targetInfo.Skill.Type == "melee")
-                    Formations.MonstersAttackMeleePosition.SetSliding(-150, 1f);
-                else
-                    Formations.MonstersAttackRangePosition.SetSliding(120, 1f);
-
-                Formations.HeroesDefencePositions.SetSliding(-120, 1f);
-            }
-            else if (targetInfo.Type == SkillTargetType.Self)
-                Formations.PartyBuffPositions.SetSpacing(120, 1f);
-        }
-        else
-        {
-            if (targetInfo.Type == SkillTargetType.Party)
-                Formations.PartyBuffPositions.SetSpacing(120, 1f);
-            else if (targetInfo.Type == SkillTargetType.Enemy)
-            {
-                if (targetInfo.Skill.Type == "melee")
-                    Formations.HeroesAttackMeleePosition.SetSliding(150, 1f);
-                else
-                    Formations.HeroesAttackRangePosition.SetSliding(-120, 1f);
-
-                Formations.MonstersDefencePositions.SetSliding(120, 1f);
-            }
-            else if (targetInfo.Type == SkillTargetType.Self)
-                Formations.PartyBuffPositions.SetSpacing(120, 1f);
-        }
-    }
-
-    private void ExecuteRiposteAnimationIntro(FormationUnit performer, SkillTargetInfo targetInfo)
-    {
-        if (RiposteResults.Count > 0)
-        {
-            performer.SetPerformerSkillAnimation(targetInfo.SkillArtInfo, false);
-            performer.SetDefendAnimation(true);
-
-            for (int i = 0; i < RiposteResults.Count; i++)
-            {
-                Riposters[i].SetDefendAnimation(false);
-                Riposters[i].SetPerformerSkillAnimation(RiposteResults[i].ArtInfo, true);
-            }
-        }
-    }
-
-    private void ExecuteSkillAnimationIntro(FormationUnit performer, SkillTargetInfo targetInfo)
-    {
-        if (targetInfo.Skill.ValidModes.Count > 1 && targetInfo.Mode != null)
-            Formations.UnitSkillIntroOverriden(performer, targetInfo.SkillArtInfo, targetInfo.Mode.Id);
-        else
-            Formations.UnitSkillIntro(performer, targetInfo.SkillArtInfo);
-
-        if (targetInfo.Type == SkillTargetType.Party)
-        {
-            foreach (var targetUnit in targetInfo.Targets)
-                if (performer != targetUnit)
-                    Formations.UnitBuffedIntro(targetUnit);
-
-            if (targetInfo.Targets.Contains(performer))
-            {
-                if(performer.Team == Team.Heroes)
-                    Formations.PartyBuffPositions.SetUnitTargets(targetInfo.Targets.OrderByDescending(unit =>
-                    unit == performer ? 5 : unit.Rank).ToList(), 0.01f, Vector2.zero);
-                else
-                    Formations.PartyBuffPositions.SetUnitTargets(targetInfo.Targets.OrderBy(unit => 
-                    unit == performer ? 5 : unit.Rank).ToList(), 0.01f, Vector2.zero);
-            }
-            else
-            {
-                var positionTargets = new List<FormationUnit>(targetInfo.Targets);
-                positionTargets.Insert(0, performer);
-                if (performer.Team == Team.Heroes)
-                    Formations.PartyBuffPositions.SetUnitTargets(positionTargets.OrderByDescending(unit =>
-                    unit == performer ? 5 : unit.Rank).ToList(), 0.01f, Vector2.zero);
-                else
-                    Formations.PartyBuffPositions.SetUnitTargets(positionTargets.OrderBy(unit =>
-                    unit == performer ? 5 : unit.Rank).ToList(), 0.01f, Vector2.zero);
-            }
-        }
-        else if (targetInfo.Type == SkillTargetType.Enemy)
-        {
-            foreach (var targetUnit in targetInfo.Targets)
-                Formations.UnitDefendIntro(targetUnit);
-
-            if(performer.Team == Team.Monsters)
-            {
-                if (targetInfo.Skill.Type == "melee")
-                    Formations.MonstersAttackMeleePosition.SetUnitTargets(performer, 0.01f, targetInfo.SkillArtInfo.AreaOffset);
-                else
-                    Formations.MonstersAttackRangePosition.SetUnitTargets(performer, 0.01f, targetInfo.SkillArtInfo.AreaOffset);
-
-                Formations.HeroesDefencePositions.SetUnitTargets(targetInfo.Targets.OrderByDescending(unit =>
-                    unit.Rank).ToList(), 0.01f, targetInfo.SkillArtInfo.TargetAreaOffset);
-            }
-            else
-            {
-                if (targetInfo.Skill.Type == "melee")
-                    Formations.HeroesAttackMeleePosition.SetUnitTargets(performer, 0.01f, targetInfo.SkillArtInfo.AreaOffset);
-                else
-                    Formations.HeroesAttackRangePosition.SetUnitTargets(performer, 0.01f, targetInfo.SkillArtInfo.AreaOffset);
-
-                Formations.MonstersDefencePositions.SetUnitTargets(targetInfo.Targets.OrderBy(unit =>
-                    unit.Rank).ToList(), 0.01f, targetInfo.SkillArtInfo.TargetAreaOffset);
-            }
-        }
-        else if (targetInfo.Type == SkillTargetType.Self)
-        {
-            Formations.PartyBuffPositions.SetUnitTargets(performer, 0.01f, Vector2.zero);
-        }
-    }
-
-    private void ExecuteSkillAnimationOutro(FormationUnit performer, SkillTargetInfo targetInfo)
-    {
-        if (RiposteResults.Count > 0)
-        {
-            performer.SetPerformerSkillAnimation(targetInfo.SkillArtInfo, false);
-            performer.SetDefendAnimation(false);
-
-            for (int i = 0; i < RiposteResults.Count; i++)
-            {
-                Riposters[i].SetDefendAnimation(false);
-                Riposters[i].SetPerformerSkillAnimation(RiposteResults[i].ArtInfo, false);
-            }
-        }
-
-        if (targetInfo.Skill.ValidModes.Count > 1 && targetInfo.Mode != null)
-            Formations.UnitSkillOutroOverriden(performer, targetInfo.SkillArtInfo, targetInfo.Mode.Id);
-        else
-            Formations.UnitSkillOutro(performer, targetInfo.SkillArtInfo);
-
-        if (targetInfo.Type == SkillTargetType.Party)
-        {
-            foreach (var targetUnit in targetInfo.Targets)
-                if (performer != targetUnit)
-                    Formations.UnitBuffedOutro(targetUnit);
-        }
-        else if (targetInfo.Type == SkillTargetType.Enemy)
-        {
-            foreach (var targetUnit in targetInfo.Targets)
-                Formations.UnitDefendOutro(targetUnit);
-        }
-
-        RiposteResults.Clear();
-        Riposters.Clear();
-    }
-
-    private void ExecuteGuardRedirection(FormationUnit performer, SkillTargetInfo targetInfo)
-    {
-        if (targetInfo.Type == SkillTargetType.Enemy)
-            for (int i = targetInfo.Targets.Count - 1; i >= 0; i--)
-                if (targetInfo.Targets[i].Character.GetStatusEffect(StatusType.Guarded).IsApplied)
-                {
-                    var guardedStatus = targetInfo.Targets[i].Character.GetStatusEffect(StatusType.Guarded) as GuardedStatusEffect;
-                    if (!targetInfo.Targets.Contains(guardedStatus.Guard))
-                        targetInfo.Targets[i] = guardedStatus.Guard;
-                }
-    }
-
-    private void ExecuteRiposteSkillActivation(FormationUnit performer, SkillTargetInfo targetInfo)
-    {
-        Riposters.Clear();
-        RiposteResults.Clear();
-
-        if (targetInfo.Type != SkillTargetType.Enemy)
-            return;
-
-        foreach (var target in targetInfo.Targets)
-        {
-            if (!target.Character.GetStatusEffect(StatusType.Riposte).IsApplied)
-                continue;
-            if (target.CombatInfo.IsDead)
-                continue;
-
-            var riposteSkill = target.Character.RiposteSkill;
-
-            if (riposteSkill == null)
-                continue;
-
-            var riposteArt = target.Character.SkillArtInfo.Find(art => art.SkillId == riposteSkill.Id);
-            if (riposteArt == null)
-                continue;
-
-            BattleSolver.SkillResult.Reset();
-            BattleSolver.ExecuteSkill(target, performer, riposteSkill, riposteArt);
-
-            Riposters.Add(target);
-            RiposteResults.Add(BattleSolver.SkillResult.Copy());
-
-            if (target.Character is Hero)
-            {
-                if (target.Character.Mode != null)
-                    FMODUnity.RuntimeManager.PlayOneShot("event:/char/ally/" + 
-                        target.Character.Class + "_" + riposteSkill.Id + "_" + target.Character.Mode.Id);
-                else
-                    FMODUnity.RuntimeManager.PlayOneShot("event:/char/ally/" +
-                        target.Character.Class + "_" + riposteSkill.Id);
-            }
-            else
-            {
-                FMODUnity.RuntimeManager.PlayOneShot("event:/char/enemy/" + 
-                    target.Character.Class + "_" + riposteSkill.Id);
-            }
-        }
-    }
-
-    private void ExecuteRiposteInstants(FormationUnit performer)
-    {
-        for (int i = 0; i < Riposters.Count; i++)
-        {
-            foreach (var skillEntry in RiposteResults[i].SkillEntries)
-            {
-                if (skillEntry.Target.CombatInfo.IsDead)
-                    break;
-
-                skillEntry.Target.OverlaySlot.UpdateOverlay();
-
-                if (skillEntry.IsHarmful && skillEntry.Target.Character.AtDeathsDoor)
-                {
-                    if (PrepareDeath(skillEntry.Target))
-                    {
-                        RaidEvents.ShowPopupMessage(skillEntry.Target, PopupMessageType.DeathBlow);
-                    }
-                    else
-                    {
-                        RaidEvents.ShowPopupMessage(skillEntry.Target, PopupMessageType.DeathsDoor);
-                    }
-                }
-                else
-                {
-                    switch (skillEntry.Type)
-                    {
-                        case SkillResultType.Miss:
-                            RaidEvents.ShowPopupMessage(skillEntry.Target, PopupMessageType.Miss, "", 40 * i);
-                            break;
-                        case SkillResultType.Dodge:
-                            RaidEvents.ShowPopupMessage(skillEntry.Target, PopupMessageType.Dodge, "", 40 * i);
-                            break;
-                        case SkillResultType.Hit:
-                            if (skillEntry.Amount < 1)
-                                RaidEvents.ShowPopupMessage(skillEntry.Target, PopupMessageType.ZeroDamage, "", 40 * i);
-                            else
-                                RaidEvents.ShowPopupMessage(skillEntry.Target,
-                                    PopupMessageType.Damage, skillEntry.Amount.ToString(), 40 * i);
-                            break;
-                        case SkillResultType.Crit:
-                            if (skillEntry.Amount < 1)
-                                RaidEvents.ShowPopupMessage(skillEntry.Target, PopupMessageType.ZeroDamage, "", 40 * i);
-                            else
-                                RaidEvents.ShowPopupMessage(skillEntry.Target,
-                                    PopupMessageType.CritDamage, skillEntry.Amount.ToString(), 40 * i);
-                            break;
-                        case SkillResultType.Heal:
-                            RaidEvents.ShowPopupMessage(skillEntry.Target, PopupMessageType.Heal, skillEntry.Amount.ToString());
-                            FMODUnity.RuntimeManager.PlayOneShot("event:/general/status/heal_ally");
-                            break;
-                        case SkillResultType.CritHeal:
-                            RaidEvents.ShowPopupMessage(skillEntry.Target, PopupMessageType.CritHeal, skillEntry.Amount.ToString());
-                            FMODUnity.RuntimeManager.PlayOneShot("event:/general/status/heal_ally_crit");
-                            break;
-                    }
-
-                    if (skillEntry.IsZeroed && (skillEntry.Type == SkillResultType.Hit || skillEntry.Type == SkillResultType.Crit))
-                    {
-                        if(skillEntry.Target.Character.IsMonster)
-                            PrepareDeath(skillEntry.Target);
-                        else if (!skillEntry.Target.Character.AtDeathsDoor && !DeathDoorEnterQueue.Contains(skillEntry.Target))
-                            PrepareDeath(skillEntry.Target);
-                    }
-                }
-            }
-            performer.OverlaySlot.UpdateOverlay();
-        }
-    }
 
     private void SetBrainDecisionMarkings(FormationUnit performer, MonsterBrainDecision brainDecision)
     {
@@ -3875,118 +3418,7 @@ public class RaidSceneManager : MonoBehaviour
         }
     }
 
-    private SkillResult ExecuteSkillBase(FormationUnit performer, SkillTargetInfo targetInfo)
-    {
-        BattleSolver.SkillResult.Reset();
-        BattleGround.LastDamaged.Clear();
-
-        foreach (var targetUnit in targetInfo.Targets)
-        {
-            BattleSolver.ExecuteSkill(performer, targetUnit, targetInfo.Skill, targetInfo.SkillArtInfo);
-            if (BattleSolver.SkillResult.Current.IsTargetHit)
-                BattleGround.LastDamaged.Add(targetUnit.Character.Class);
-        }
-
-        var skillResult = BattleSolver.SkillResult.Copy();
-
-        string playSkillEvent;
-        string playSkillMissEvent;
-
-        if (performer.Character.IsMonster)
-        {
-            playSkillEvent = "event:/char/enemy/" + performer.Character.Class + "_" + targetInfo.Skill.Id;
-            playSkillMissEvent = "event:/char/enemy/" + performer.Character.Class + "_" + targetInfo.Skill.Id + "_miss";
-        }
-        else if (performer.Character.Mode != null)
-        {
-            playSkillEvent = "event:/char/ally/" + performer.Character.Class + "_" +
-                targetInfo.Skill.Id + "_" + performer.Character.Mode.Id;
-            playSkillMissEvent = "event:/char/ally/" + performer.Character.Class + "_" + 
-                targetInfo.Skill.Id + "_miss" + "_" + performer.Character.Mode.Id;
-        }
-        else
-        {
-            playSkillEvent = "event:/char/ally/" + performer.Character.Class + "_" + targetInfo.Skill.Id;
-            playSkillMissEvent = playSkillEvent + "_miss";
-        }
-
-        if(skillResult.HasHit && FMODUnity.RuntimeManager.GetEventDescription(playSkillEvent) != null)
-            FMODUnity.RuntimeManager.PlayOneShot(playSkillEvent, DungeonCamera.Transform.position);
-        else if (FMODUnity.RuntimeManager.GetEventDescription(playSkillMissEvent) != null)
-            FMODUnity.RuntimeManager.PlayOneShot(playSkillMissEvent, DungeonCamera.Transform.position);
-
-        if (skillResult.HasCritEffect && targetInfo.Type == SkillTargetType.Enemy)
-            DarkestSoundManager.ExecuteNarration(performer.Character.IsMonster ? "crit_hero" : "crit_monster", NarrationPlace.Raid);
-
-        return skillResult;
-    }
-
-    private List<DeathDamage> ExecuteBattlegroundDeaths(FormationUnit peformer)
-    {
-        List<DeathDamage> deathDamages = new List<DeathDamage>();
-
-        if (peformer.CombatInfo.MarkedForDeath)
-        {
-            peformer.CombatInfo.IsDead = true;
-            List<FormationUnit> lifeLinkedUnits = new List<FormationUnit>();
-            for (int i = 0; i < peformer.Party.Units.Count; i++)
-            {
-                if (peformer.Party.Units[i].Character.LifeLink != null)
-                {
-                    if (peformer.Party.Units[i].Character.LifeLink.LinkBaseClass == peformer.Character.Class)
-                        lifeLinkedUnits.Add(peformer.Party.Units[i]);
-                }
-            }
-            lifeLinkedUnits.ForEach(SummonPurging);
-            lifeLinkedUnits.Clear();
-
-            if (peformer.CombatInfo.IsDead)
-                if (peformer.Character.DeathDamage != null)
-                    deathDamages.Add(peformer.Character.DeathDamage);
-
-            _effectEventsExecutor.ExecuteDeath(peformer);
-        }
-
-        for (int i = BattleGround.HeroParty.Units.Count - 1; i >= 0; i--)
-        {
-            if (BattleGround.HeroParty.Units[i].CombatInfo.IsDead)
-                if (BattleGround.HeroParty.Units[i].Character.DeathDamage != null)
-                    deathDamages.Add(BattleGround.HeroParty.Units[i].Character.DeathDamage);
-
-            _effectEventsExecutor.ExecuteDeath(BattleGround.HeroParty.Units[i]);
-        }
-
-        for (int i = BattleGround.MonsterParty.Units.Count - 1; i >= 0; i--)
-        {
-            if (BattleGround.MonsterParty.Units[i].CombatInfo.IsDead)
-                if (BattleGround.MonsterParty.Units[i].Character.DeathDamage != null)
-                    deathDamages.Add(BattleGround.MonsterParty.Units[i].Character.DeathDamage);
-
-            _effectEventsExecutor.ExecuteDeath(BattleGround.MonsterParty.Units[i]);
-        }
-
-        return deathDamages;
-    }
-
-    private IEnumerator ExecuteDeathDamages(List<DeathDamage> deathDamages)
-    {
-        for (int i = 0; i < deathDamages.Count; i++)
-        {
-            var deathDamageTarget = BattleGround.MonsterParty.Units.Find(unit => unit.Character.Class == deathDamages[i].TargetBaseClass) ??
-                BattleGround.HeroParty.Units.Find(unit => unit.Character.Class == deathDamages[i].TargetBaseClass);
-
-            if (deathDamageTarget != null)
-            {
-                int damage = deathDamageTarget.Character.TakeDamage(deathDamages[i].TargetDamage);
-                deathDamageTarget.OverlaySlot.UpdateOverlay();
-                RaidEvents.ShowPopupMessage(deathDamageTarget, PopupMessageType.Damage, damage.ToString());
-                deathDamageTarget.SetDefendAnimation(true);
-                yield return new WaitForSeconds(0.8f);
-                deathDamageTarget.SetDefendAnimation(false);
-            }
-        }
-    }
-
+    //TODO: Tight coupling between effect processing and raid state changing
     private IEnumerator ExecuteMonsterSkill(FormationUnit actionUnit, string combatSkillOverride = null)
     {
         RaidEvents.MonsterTooltip.IsDisabled = true;
@@ -4006,7 +3438,7 @@ public class RaidSceneManager : MonoBehaviour
         }
         yield return new WaitForSeconds(0.1f);
         SetBrainDecisionMarkings(actionUnit, brainDecision);
-        ExecuteGuardRedirection(actionUnit, brainDecision.TargetInfo);
+        _effectEventsExecutor.ExecuteGuardRedirection(actionUnit, brainDecision.TargetInfo);
         yield return new WaitForSeconds(0.1f);
         brainDecision.TargetInfo.UpdateSkillInfo(actionUnit, brainDecision.SelectedSkill);
         if (brainDecision.TargetInfo.SkillArtInfo.CanDisplaySelection != false)
@@ -4018,14 +3450,14 @@ public class RaidSceneManager : MonoBehaviour
             RaidEvents.HideAnnouncment();
         yield return new WaitForSeconds(0.2f);
         DungeonCamera.Zoom(50, 0.05f);
-        var skillResult = ExecuteSkillBase(actionUnit, brainDecision.TargetInfo);
+        var skillResult = _effectEventsExecutor.ExecuteSkillBase(actionUnit, brainDecision.TargetInfo);
         yield return new WaitForSeconds(0.05f);
         DungeonCamera.SwitchBlur(true);
-        ExecuteSkillAnimationIntro(actionUnit, brainDecision.TargetInfo);
+        _effectEventsExecutor.ExecuteSkillAnimationIntro(actionUnit, brainDecision.TargetInfo);
         yield return new WaitForSeconds(0.01f);
-        ExecuteSkillInstants(actionUnit, brainDecision.TargetInfo, skillResult);
+        _effectEventsExecutor.ExecuteSkillInstants(actionUnit, brainDecision.TargetInfo, skillResult);
         yield return new WaitForSeconds(0.01f);
-        ExecuteSlidingSetup(actionUnit, brainDecision.TargetInfo);
+        _effectEventsExecutor.ExecuteSlidingSetup(actionUnit, brainDecision.TargetInfo);
         yield return new WaitForSeconds(0.70f);
         #region Teleport Skill
         if(brainDecision.SelectedSkill.Type == "teleport")
@@ -4107,19 +3539,19 @@ public class RaidSceneManager : MonoBehaviour
             yield break;
         }
         #endregion
-        ExecuteRiposteSkillActivation(actionUnit, brainDecision.TargetInfo);
+        _effectEventsExecutor.ExecuteRiposteSkillActivation(actionUnit, brainDecision.TargetInfo);
         yield return new WaitForSeconds(0.05f);
-        ExecuteRiposteAnimationIntro(actionUnit, brainDecision.TargetInfo);
+        _effectEventsExecutor.ExecuteRiposteAnimationIntro(actionUnit, brainDecision.TargetInfo);
         yield return new WaitForSeconds(0.05f);
-        ExecuteRiposteInstants(actionUnit);
+        _effectEventsExecutor.ExecuteRiposteInstants(actionUnit);
         yield return new WaitForSeconds(Riposters.Count > 0 ? 1.2f : 0.7f);
         DungeonCamera.Zoom(DungeonCamera.StandardFOV, 0.1f);
         DungeonCamera.SwitchBlur(false);
-        ExecuteSkillAnimationOutro(actionUnit, brainDecision.TargetInfo);
+        _effectEventsExecutor.ExecuteSkillAnimationOutro(actionUnit, brainDecision.TargetInfo);
 
-        List<DeathDamage> deathDamages = ExecuteBattlegroundDeaths(actionUnit);
+        List<DeathDamage> deathDamages = _effectEventsExecutor.ExecuteBattlegroundDeaths(actionUnit);
         if (deathDamages.Count > 0)
-            yield return StartCoroutine(ExecuteDeathDamages(deathDamages));
+            yield return StartCoroutine(_effectEventsExecutor.ExecuteDeathDamages(deathDamages));
         
         yield return new WaitForSeconds(0.175f);
         Formations.ShowUnitOverlay();
@@ -4209,95 +3641,7 @@ public class RaidSceneManager : MonoBehaviour
         #endregion
     }
 
-    private IEnumerator ExecuteHeroSkill(FormationUnit actionUnit, SkillTargetInfo targetInfo, CombatSkill skill)
-    {
-        RaidEvents.MonsterTooltip.IsDisabled = true;
-        RaidEvents.MonsterTooltip.Hide();
-        ExecuteGuardRedirection(actionUnit, targetInfo);
-        Formations.HideUnitOverlay();
-        TorchMeter.Hide();
-        yield return new WaitForSeconds(0.2f);
-        DungeonCamera.Zoom(50, 0.05f);
-        var skillResult = ExecuteSkillBase(actionUnit, targetInfo);
-        yield return new WaitForSeconds(0.05f);
-        DungeonCamera.SwitchBlur(true);
-        ExecuteSkillAnimationIntro(actionUnit, targetInfo);
-        yield return new WaitForSeconds(0.01f);
-        ExecuteSkillInstants(actionUnit, targetInfo, skillResult);
-        yield return new WaitForSeconds(0.01f);
-        ExecuteSlidingSetup(actionUnit, targetInfo);
-        yield return new WaitForSeconds(0.70f);
-        ExecuteRiposteSkillActivation(actionUnit, targetInfo);
-        yield return new WaitForSeconds(0.05f);
-        ExecuteRiposteAnimationIntro(actionUnit, targetInfo);
-        yield return new WaitForSeconds(0.05f);
-        ExecuteRiposteInstants(actionUnit);
-        yield return new WaitForSeconds(Riposters.Count > 0 ? 1.2f : 0.7f);
-        DungeonCamera.Zoom(DungeonCamera.StandardFOV, 0.1f);
-        DungeonCamera.SwitchBlur(false);
-        ExecuteSkillAnimationOutro(actionUnit, targetInfo);
-
-        List<DeathDamage> deathDamages = ExecuteBattlegroundDeaths(actionUnit);
-        if (deathDamages.Count > 0)
-            yield return StartCoroutine(ExecuteDeathDamages(deathDamages));
-
-        yield return new WaitForSeconds(0.175f);
-        Formations.ShowUnitOverlay();
-        TorchMeter.Show();
-        Formations.ResetSelections();
-        yield return new WaitForSeconds(0.075f);
-
-        if (targetInfo.Type == SkillTargetType.Enemy && skillResult.HasCritEffect)
-        {
-            DarkestDungeonManager.Data.Effects["Heal Stress 1"].ApplyIndependent(actionUnit);
-
-            for (int j = 0; j < BattleGround.HeroParty.Units.Count; j++)
-                if (BattleGround.HeroParty.Units[j] != actionUnit && RandomSolver.CheckSuccess(0.33f))
-                    DarkestDungeonManager.Data.Effects["Heal Stress 1"].
-                        ApplyIndependent(BattleGround.HeroParty.Units[j]);
-        }
-        else if (skillResult.HasDeadEffect)
-            DarkestDungeonManager.Data.Effects["Heal Stress Chance 1"].ApplyIndependent(actionUnit);
-
-        yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(true));
-
-        for (int i = 0; i < targetInfo.Targets.Count; i++)
-            BattleSolver.RemoveConditions(targetInfo.Targets[i]);
-        BattleSolver.RemoveConditions(actionUnit);
-
-        RaidEvents.MonsterTooltip.IsDisabled = false;
-
-        #region Trait Comment Attack Result
-
-        if (BattleGround.HeroParty.Units.Contains(actionUnit) && BattleGround.HeroParty.Units.Count > 1)
-        {
-            for (int i = 0; i < actionUnit.Party.Units.Count; i++)
-            {
-                if (actionUnit == actionUnit.Party.Units[i] || actionUnit.Party.Units[i].Character.Trait == null)
-                    continue;
-
-                if (targetInfo.Type != SkillTargetType.Enemy)
-                    continue;
-
-                ReactionType reactionType = skillResult.HasHit
-                    ? ReactionType.CommentAllyAttackHit
-                    : ReactionType.CommentAllyAttackMiss;
-
-                if (RandomSolver.CheckSuccess(actionUnit.Party.Units[i].Character.Trait.Reactions[reactionType].Chance))
-                {
-                    var barkStressEffect = actionUnit.Party.Units[i].Character.Trait.Reactions[reactionType].Effect;
-                    yield return new WaitForSeconds(1f);
-                    foreach (SubEffect subEffect in barkStressEffect.SubEffects)
-                        subEffect.Apply(actionUnit.Party.Units[i], actionUnit, barkStressEffect);
-                    yield return new WaitForSeconds(0.1f);
-                    yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(false));
-                    break;
-                }
-            }
-        }
-
-        #endregion
-    }
+   
 
     private IEnumerator ExecuteHeroItemUsage(FormationUnit actionUnit, InventorySlot slot)
     {
@@ -4596,14 +3940,14 @@ public class RaidSceneManager : MonoBehaviour
             yield return new WaitForSeconds(1.4f - timeWasted);
             timeWasted += 1.4f - timeWasted;
             for (int i = 0; i < bleedDeaths.Count; i++)
-                _effectEventsExecutor.ExecuteDeath(bleedDeaths[i]);
+                _effectEventsExecutor.ExecuteDeathAsync(bleedDeaths[i]);
             bleedDeaths.Clear();
         }
         if(poisonDeaths.Count > 0)
         {
             yield return new WaitForSeconds(2 - timeWasted);
             for (int i = 0; i < poisonDeaths.Count; i++)
-                _effectEventsExecutor.ExecuteDeath(poisonDeaths[i]);
+                _effectEventsExecutor.ExecuteDeathAsync(poisonDeaths[i]);
             poisonDeaths.Clear();
         }
 
