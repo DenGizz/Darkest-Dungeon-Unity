@@ -7,14 +7,14 @@ public class RaidSceneMultiplayerManager : RaidSceneManager
 {
     [SerializeField]
     private RaidQuestPanel invaderQuestPanel;
-
+/*
     public new static RaidSceneMultiplayerManager Instanse { get; private set; }
 
     private readonly List<FormationUnit> pvpDialogUnits = new List<FormationUnit>();
 
     private Buff DeathsDoorSurvivalDebuff { get; set; }
 
-    protected override void Awake()
+    protected void Awake()
     {
         if (Instanse == null)
         {
@@ -101,7 +101,7 @@ public class RaidSceneMultiplayerManager : RaidSceneManager
             Destroy(Instanse.gameObject);
     }
 
-    protected override void Start()
+    private void Start()
     {
         if (Instanse != this)
             return;
@@ -241,7 +241,7 @@ public class RaidSceneMultiplayerManager : RaidSceneManager
             foreach (var hero in Formations.Heroes.Party.Units)
                 hero.SetCombatAnimation(false);
 
-            yield return StartCoroutine(ExecuteEffectEvents(false));
+            yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(false));
             yield return new WaitForSeconds(0.3f);
             yield return ProcessRaidFailure();
         }
@@ -619,7 +619,7 @@ public class RaidSceneMultiplayerManager : RaidSceneManager
 
                     yield return new WaitForSeconds(1.2f);
 
-                    yield return StartCoroutine(ExecuteEffectEvents(true));
+                    yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(true));
                 }
                 #endregion
             }
@@ -815,7 +815,7 @@ public class RaidSceneMultiplayerManager : RaidSceneManager
                                 Formations.ShowUnitOverlay();
                                 Formations.ResetSelections();
                                 yield return new WaitForSeconds(0.075f);
-                                yield return StartCoroutine(ExecuteEffectEvents(true));
+                                yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(true));
                             }
                         }
                     }
@@ -875,7 +875,7 @@ public class RaidSceneMultiplayerManager : RaidSceneManager
                     }
 
                     yield return new WaitForSeconds(0.075f);
-                    yield return StartCoroutine(ExecuteEffectEvents(true));
+                    yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(true));
                 }
                 #endregion
             }
@@ -1124,14 +1124,14 @@ public class RaidSceneMultiplayerManager : RaidSceneManager
                         yield return new WaitForSeconds(1.4f);
                         BattleGround.Round.PostHeroTurn();
                         ExecuteDeath(actionUnit);
-                        yield return StartCoroutine(ExecuteEffectEvents(true));
+                        yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(true));
                         yield break;
                     }
                     else
                     {
                         RaidEvents.ShowPopupMessage(actionUnit, PopupMessageType.DeathsDoor);
                         yield return new WaitForSeconds(0.6f);
-                        yield return StartCoroutine(ExecuteEffectEvents(true));
+                        yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(true));
                     }
                 }
                 else
@@ -1161,13 +1161,13 @@ public class RaidSceneMultiplayerManager : RaidSceneManager
                                 }
                             }
                         }
-                        yield return StartCoroutine(ExecuteEffectEvents(true));
+                        yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(true));
 
                         yield break;
                     }
                     else
                     {
-                        yield return StartCoroutine(ExecuteEffectEvents(true));
+                        yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(true));
                     }
                 }
             }
@@ -1198,14 +1198,14 @@ public class RaidSceneMultiplayerManager : RaidSceneManager
                         yield return new WaitForSeconds(1.4f);
                         BattleGround.Round.PostHeroTurn();
                         ExecuteDeath(actionUnit);
-                        yield return StartCoroutine(ExecuteEffectEvents(true));
+                        yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(true));
                         yield break;
                     }
                     else
                     {
                         RaidEvents.ShowPopupMessage(actionUnit, PopupMessageType.DeathsDoor);
                         yield return new WaitForSeconds(0.6f);
-                        yield return StartCoroutine(ExecuteEffectEvents(true));
+                        yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(true));
                     }
                 }
                 else
@@ -1235,13 +1235,13 @@ public class RaidSceneMultiplayerManager : RaidSceneManager
                                 }
                             }
                         }
-                        yield return StartCoroutine(ExecuteEffectEvents(true));
+                        yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(true));
 
                         yield break;
                     }
                     else
                     {
-                        yield return StartCoroutine(ExecuteEffectEvents(true));
+                        yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(true));
                     }
                 }
             }
@@ -1321,7 +1321,7 @@ public class RaidSceneMultiplayerManager : RaidSceneManager
             }
 
             yield return new WaitForSeconds(0.075f);
-            yield return StartCoroutine(ExecuteEffectEvents(true));
+            yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(true));
         }
         #endregion
 
@@ -1381,7 +1381,7 @@ public class RaidSceneMultiplayerManager : RaidSceneManager
                         actionUnit.SetDefendAnimation(false);
                         yield return new WaitForSeconds(0.1f);
 
-                        yield return StartCoroutine(ExecuteEffectEvents(false));
+                        yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(false));
                     }
                     break;
                 #endregion
@@ -1398,7 +1398,7 @@ public class RaidSceneMultiplayerManager : RaidSceneManager
                     for (int i = 0; i < barkStressEffect.SubEffects.Count; i++)
                         barkStressEffect.SubEffects[i].Apply(actionUnit, barkTarget, barkStressEffect);
                     yield return new WaitForSeconds(0.1f);
-                    yield return StartCoroutine(ExecuteEffectEvents(false));
+                    yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(false));
                     break;
                 #endregion
                 case StartTurnActType.BuffAlly:
@@ -1414,7 +1414,7 @@ public class RaidSceneMultiplayerManager : RaidSceneManager
                     for (int i = 0; i < buffAllyEffect.SubEffects.Count; i++)
                         buffAllyEffect.SubEffects[i].Apply(actionUnit, buffAllyTarget, buffAllyEffect);
                     yield return new WaitForSeconds(0.1f);
-                    yield return StartCoroutine(ExecuteEffectEvents(false));
+                    yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(false));
                     break;
                 #endregion
                 case StartTurnActType.BuffParty:
@@ -1428,7 +1428,7 @@ public class RaidSceneMultiplayerManager : RaidSceneManager
                             buffPartyEffect.SubEffects[i].Apply(actionUnit, actionUnit.Party.Units[j], buffPartyEffect);
 
                     yield return new WaitForSeconds(0.1f);
-                    yield return StartCoroutine(ExecuteEffectEvents(false));
+                    yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(false));
                     break;
                 #endregion
                 case StartTurnActType.ChangePosition:
@@ -1502,7 +1502,7 @@ public class RaidSceneMultiplayerManager : RaidSceneManager
                     for (int i = 0; i < markSelfEffect.SubEffects.Count; i++)
                         markSelfEffect.SubEffects[i].Apply(actionUnit, actionUnit, markSelfEffect);
                     yield return new WaitForSeconds(0.1f);
-                    yield return StartCoroutine(ExecuteEffectEvents(false));
+                    yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(false));
                     break;
                 #endregion
                 case StartTurnActType.RandomCommand:
@@ -1517,7 +1517,7 @@ public class RaidSceneMultiplayerManager : RaidSceneManager
                             stressHealPartyEffect.SubEffects[i].Apply(actionUnit, actionUnit.Party.Units[j], stressHealPartyEffect);
 
                     yield return new WaitForSeconds(0.1f);
-                    yield return StartCoroutine(ExecuteEffectEvents(false));
+                    yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(false));
                     break;
                 #endregion
                 case StartTurnActType.StressHealSelf:
@@ -1527,7 +1527,7 @@ public class RaidSceneMultiplayerManager : RaidSceneManager
                     for (int i = 0; i < stressHealSelfEffect.SubEffects.Count; i++)
                         stressHealSelfEffect.SubEffects[i].Apply(actionUnit, actionUnit, stressHealSelfEffect);
                     yield return new WaitForSeconds(0.1f);
-                    yield return StartCoroutine(ExecuteEffectEvents(false));
+                    yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(false));
                     break;
                 #endregion
             }
@@ -2257,4 +2257,5 @@ public class RaidSceneMultiplayerManager : RaidSceneManager
     }
 
     #endregion
+    */
 }
