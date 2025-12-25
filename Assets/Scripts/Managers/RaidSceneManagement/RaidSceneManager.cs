@@ -3313,11 +3313,7 @@ public class RaidSceneManager : MonoBehaviour
     #endregion
 
     #region Skill Usage
-
-
-
-
-
+    
     private void SetBrainDecisionMarkings(FormationUnit performer, MonsterBrainDecision brainDecision)
     {
         if (brainDecision.TargetInfo.Targets.Contains(performer))
