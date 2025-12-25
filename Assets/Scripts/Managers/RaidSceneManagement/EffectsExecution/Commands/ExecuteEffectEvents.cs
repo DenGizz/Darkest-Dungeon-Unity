@@ -14,8 +14,7 @@ namespace Managers.RaidSceneManagement.EffectsExecution.Routines
         private readonly ExecuteResolveChecks _executeResolveChecksCommand;
         private readonly PrepareDeath _prepareDeathCommand;
 
-        private readonly RaidRuleInfo
-            Rules; //TODO: Rules instance can be overriden from outer code, need to implement rules locator
+        private readonly RaidRuleInfo Rules;
 
         private readonly List<FormationUnit> UnitEventQueue;
         private readonly ExecuteDeath _executeDeathCommand;
