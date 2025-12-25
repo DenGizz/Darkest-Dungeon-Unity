@@ -6,10 +6,12 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using Managers.RaidSceneManagement.EffectsExecution;
+using Managers.RaidSceneManagement.EventProcessing;
 
 public class RaidSceneManager : MonoBehaviour
 {
     private static IEffectEventsExecutor _effectEventsExecutor;
+    private IEventProcessor _eventProcessor;
     
     public static RaidSceneManager Instanse { get; protected set; }
 
@@ -828,7 +830,7 @@ public class RaidSceneManager : MonoBehaviour
             if (RaidPanel.SelectedUnit != null)
                 RaidPanel.SelectedUnit.OverlaySlot.UnitSelected();
 
-            yield return StartCoroutine(ProcessTransformationsAfterBattle());
+            yield return StartCoroutine(_eventProcessor.ProcessTransformationsAfterBattle());
 
             foreach (var hero in Formations.Heroes.Party.Units)
                 hero.SetCombatAnimation(false);
@@ -1074,7 +1076,7 @@ public class RaidSceneManager : MonoBehaviour
                 {
                     campEffects.Remove(damageEffect);
                     BattleSolver.FindTargets(RaidPanel.SelectedUnit, RaidEvents.CampEvent.SelectedTarget, damageEffect, TempList);
-                    TempList.ForEach(unit => ProcessDamage(unit, Mathf.RoundToInt(unit.Character.MaxHealth * 0.2f)));
+                    TempList.ForEach(unit => _eventProcessor.ProcessDamage(unit, Mathf.RoundToInt(unit.Character.MaxHealth * 0.2f)));
                     yield return StartCoroutine(ProcessHeroDeaths(0.6f, 0.8f, 0.3f));
                 }
 
@@ -1633,73 +1635,12 @@ public class RaidSceneManager : MonoBehaviour
             ResolveCheckQueue.Add(unit);
     }
 
-    public virtual void AddHeartAttackCheck(FormationUnit unit)
+    public void AddHeartAttackCheck(FormationUnit unit)
     {
         if (!HeartAttackCheckQueue.Contains(unit))
             HeartAttackCheckQueue.Add(unit);
     }
 
-
-    private bool ProcessDamage(FormationUnit unit, int damage)
-    {
-        unit.Character.TakeDamage(damage);
-        unit.OverlaySlot.UpdateOverlay();
-
-        if (!unit.Character.HasZeroHealth)
-            RaidEvents.ShowPopupMessage(unit, PopupMessageType.Damage, damage.ToString());
-        else
-        {
-            bool atDeathDoor = unit.Character.AtDeathsDoor;
-            bool isDead = _effectEventsExecutor.PrepareDeath(unit);
-
-            RaidEvents.ShowPopupMessage(unit, atDeathDoor ? (isDead ? PopupMessageType.DeathBlow :
-                PopupMessageType.DeathsDoor) : PopupMessageType.Damage, damage.ToString());
-
-            return isDead;
-        }
-        return false;
-    }
-
-    protected void ProcessStress(FormationUnit unit, int stress)
-    {
-        int damage = Mathf.RoundToInt(stress * (1 + unit.Character[AttributeType.StressDmgReceivedPercent].ModifiedValue));
-        if (damage < 1)
-            damage = 1;
-
-        unit.Character.Stress.IncreaseValue(damage);
-
-        if (unit.Character.IsOverstressed)
-        {
-            if (unit.Character.IsVirtued)
-                unit.Character.Stress.CurrentValue = Mathf.Clamp(unit.Character.Stress.CurrentValue, 0, 100);
-            else if (!unit.Character.IsAfflicted && unit.Character.IsOverstressed)
-                Instanse.AddResolveCheck(unit);
-
-            if (Mathf.RoundToInt(unit.Character.Stress.CurrentValue) == 200)
-                Instanse.AddHeartAttackCheck(unit);
-        }
-
-        unit.OverlaySlot.UpdateOverlay();
-        RaidEvents.ShowPopupMessage(unit, PopupMessageType.Stress, damage.ToString());
-        unit.SetHalo("afflicted");
-    }
-
-    protected bool ProcessDeathDamage(DeathDamage deathDamage)
-    {
-        if (deathDamage == null)
-            return false;
-
-        var damageTarget = BattleGround.MonsterParty.Units.Find(target =>
-            target.Character.Class == deathDamage.TargetBaseClass);
-
-        if (damageTarget == null)
-            return false;
-
-        int damage = damageTarget.Character.TakeDamage(deathDamage.TargetDamage);
-        RaidEvents.ShowPopupMessage(damageTarget, PopupMessageType.Damage, damage.ToString());
-
-        return true;
-    }
 
     protected IEnumerator ProcessRaidFailure()
     {
@@ -1728,23 +1669,6 @@ public class RaidSceneManager : MonoBehaviour
         yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(false));
 
         yield return ProcessRaidFailure();
-    }
-
-    protected IEnumerator ProcessTransformationsAfterBattle()
-    {
-        foreach (FormationUnit unit in Formations.Heroes.Party.Units)
-        {
-            var hero = (Hero)unit.Character;
-            if (hero.Mode == null || hero.Mode.AfflictionSkillId == null)
-                continue;
-
-            var skill = hero.SelectedCombatSkills.Find(s => s.Id == hero.Mode.BattleCompleteSkillId);
-            if (skill == null)
-                continue;
-
-            SkillTargetInfo targetInfo = BattleSolver.SelectSkillTargets(unit, unit, skill).UpdateSkillInfo(unit, skill);
-            yield return StartCoroutine(_effectEventsExecutor.ExecuteHeroSkillAsync(unit, targetInfo, skill));
-        }
     }
 
     #region Battle Round
@@ -1893,7 +1817,7 @@ public class RaidSceneManager : MonoBehaviour
 
     private IEnumerator FinishEncouter(IRaidArea areaView)
     {
-        yield return StartCoroutine(ProcessTransformationsAfterBattle());
+        yield return StartCoroutine(_eventProcessor.ProcessTransformationsAfterBattle());
 
         BattleGround.ResetTargetRanks();
         DarkestSoundManager.StopBattleSoundtrack();
@@ -2636,7 +2560,7 @@ public class RaidSceneManager : MonoBehaviour
                 var bleedEffect = (BleedingStatusEffect)actionUnit.Character.GetStatusEffect(StatusType.Bleeding);
                 FMODUnity.RuntimeManager.PlayOneShot("event:/general/status/bleed_dot");
 
-                if (ProcessDamage(actionUnit, bleedEffect.CurrentTickDamage))
+                if (_eventProcessor.ProcessDamage(actionUnit, bleedEffect.CurrentTickDamage))
                 {
                     yield return new WaitForSeconds(1.4f);
                     BattleGround.Round.PostHeroTurn();
@@ -2654,7 +2578,7 @@ public class RaidSceneManager : MonoBehaviour
                 var poisonEffect = (PoisonStatusEffect)actionUnit.Character.GetStatusEffect(StatusType.Poison);
                 FMODUnity.RuntimeManager.PlayOneShot("event:/general/status/poison_dot");
 
-                if (ProcessDamage(actionUnit, poisonEffect.CurrentTickDamage))
+                if (_eventProcessor.ProcessDamage(actionUnit, poisonEffect.CurrentTickDamage))
                 {
                     yield return new WaitForSeconds(1.4f);
                     BattleGround.Round.PostHeroTurn();
@@ -2698,7 +2622,7 @@ public class RaidSceneManager : MonoBehaviour
             #region Mode Stress
             if (actionUnit.Character.Mode != null && actionUnit.Character.Mode.StressPerTurn != 0)
             {
-                ProcessStress(actionUnit, actionUnit.Character.Mode.StressPerTurn);
+                _eventProcessor.ProcessStress(actionUnit, actionUnit.Character.Mode.StressPerTurn);
                 yield return new WaitForSeconds(1.2f);
 
                 var captureRecord = BattleGround.Captures.Find(capture => capture.PrisonerUnit == actionUnit);
@@ -3165,7 +3089,7 @@ public class RaidSceneManager : MonoBehaviour
                         FMODUnity.RuntimeManager.PlayOneShot("event:/general/combat/retreat");
                         DarkestSoundManager.ExecuteNarration("battle_retreat", NarrationPlace.Raid);
 
-                        yield return StartCoroutine(ProcessTransformationsAfterBattle());
+                        yield return StartCoroutine(_eventProcessor.ProcessTransformationsAfterBattle());
 
                         DarkestDungeonManager.ScreenFader.Fade(2);
                         yield return new WaitForSeconds(0.5f);
@@ -3267,14 +3191,14 @@ public class RaidSceneManager : MonoBehaviour
                 var bleedEffect = (BleedingStatusEffect)actionUnit.Character[StatusType.Bleeding];
                 FMODUnity.RuntimeManager.PlayOneShot("event:/general/status/bleed_dot");
 
-                if (ProcessDamage(actionUnit, bleedEffect.CurrentTickDamage))
+                if (_eventProcessor.ProcessDamage(actionUnit, bleedEffect.CurrentTickDamage))
                 {
                     DeathDamage deathDamage = actionUnit.Character.DeathDamage;
                     yield return new WaitForSeconds(1.4f);
                     BattleGround.Round.PostMonsterTurn();
                     _effectEventsExecutor.ExecuteDeathAsync(actionUnit);
 
-                    if (ProcessDeathDamage(deathDamage))
+                    if (_eventProcessor.ProcessDeathDamage(deathDamage))
                         yield return new WaitForSeconds(0.4f);
 
                     yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(true));
@@ -3289,14 +3213,14 @@ public class RaidSceneManager : MonoBehaviour
                 var poisonEffect = (PoisonStatusEffect)actionUnit.Character[StatusType.Poison];
                 FMODUnity.RuntimeManager.PlayOneShot("event:/general/status/poison_dot");
 
-                if (ProcessDamage(actionUnit, poisonEffect.CurrentTickDamage))
+                if (_eventProcessor.ProcessDamage(actionUnit, poisonEffect.CurrentTickDamage))
                 {
                     DeathDamage deathDamage = actionUnit.Character.DeathDamage;
                     yield return new WaitForSeconds(1.4f);
                     BattleGround.Round.PostMonsterTurn();
                     _effectEventsExecutor.ExecuteDeathAsync(actionUnit);
 
-                    if (ProcessDeathDamage(deathDamage))
+                    if (_eventProcessor.ProcessDeathDamage(deathDamage))
                         yield return new WaitForSeconds(0.4f);
 
                     yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(true));
@@ -3865,7 +3789,7 @@ public class RaidSceneManager : MonoBehaviour
             FMODUnity.RuntimeManager.PlayOneShot("event:/general/status/bleed_dot");
             executedBleed = true;
 
-            if (ProcessDamage(UnitEventQueue[i], bleedEffect.CurrentTickDamage))
+            if (_eventProcessor.ProcessDamage(UnitEventQueue[i], bleedEffect.CurrentTickDamage))
             {
                 if (PartyController.MovementAllowed)
                 {
@@ -3903,7 +3827,7 @@ public class RaidSceneManager : MonoBehaviour
             FMODUnity.RuntimeManager.PlayOneShot("event:/general/status/poison_dot");
             executedPoison = true;
 
-            if (ProcessDamage(UnitEventQueue[i], poisonEffect.CurrentTickDamage))
+            if (_eventProcessor.ProcessDamage(UnitEventQueue[i], poisonEffect.CurrentTickDamage))
             {
                 if (PartyController.MovementAllowed)
                 {
@@ -4956,7 +4880,7 @@ public class RaidSceneManager : MonoBehaviour
         DarkestSoundManager.ExecuteNarration("hunger_starve", NarrationPlace.Raid);
         FMODUnity.RuntimeManager.PlayOneShot("event:/general/status/bleed_dot");
 
-        HeroParty.Units.ForEach(unit => ProcessDamage(unit, unit.Character.TakeDamagePercent(0.2f)));
+        HeroParty.Units.ForEach(unit => _eventProcessor.ProcessDamage(unit, unit.Character.TakeDamagePercent(0.2f)));
         HeroParty.Units.ForEach(unit => DarkestDungeonManager.Data.Effects["Stress 2"].ApplyIndependent(unit));
         yield return StartCoroutine(ProcessHeroDeaths(0.6f, 0.8f, 0.3f));
         yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(false, 0.3f));
