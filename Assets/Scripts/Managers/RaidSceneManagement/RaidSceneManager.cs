@@ -5,9 +5,12 @@ using UnityEngine.SceneManagement;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using Managers.RaidSceneManagement.EffectsExecution;
 
 public class RaidSceneManager : MonoBehaviour
 {
+    protected static IEffectEventsExecutor _effectEventsExecutor;
+    
     public static RaidSceneManager Instanse { get; protected set; }
 
     #region Raid References
@@ -84,7 +87,7 @@ public class RaidSceneManager : MonoBehaviour
 
     public static bool IsUnitEventInProgress
     {
-        get { return Instanse.executingEffectEvent || Instanse.itemUsageEvent != null || Instanse.roundAdvanceCounter != 0; }
+        get { return _effectEventsExecutor.IsExecutingEffectEvent || Instanse.itemUsageEvent != null || Instanse.roundAdvanceCounter != 0; }
     }
 
     public static bool AnyWindowOpened
@@ -120,7 +123,7 @@ public class RaidSceneManager : MonoBehaviour
 
     #endregion
 
-    protected virtual void Awake()
+    private void Awake()
     {
         if (Instanse == null)
         {
@@ -163,7 +166,7 @@ public class RaidSceneManager : MonoBehaviour
             Destroy(Instanse.gameObject);
     }
 
-    protected virtual void Start()
+    private void Start()
     {
         if (Instanse != this)
             return;
@@ -260,7 +263,7 @@ public class RaidSceneManager : MonoBehaviour
 
     #region Update
 
-    protected virtual void Update()
+    private void Update()
     {
         if (Input.GetKeyUp(KeyCode.Escape))
             OnEscapePressed();
@@ -445,7 +448,7 @@ public class RaidSceneManager : MonoBehaviour
         return screenPoint;
     }
 
-    protected IEnumerator ExecuteCampEffect(CampEffect currentEffect, FormationUnit target, bool skipNotification)
+    private IEnumerator ExecuteCampEffect(CampEffect currentEffect, FormationUnit target, bool skipNotification)
     {
         switch (currentEffect.Type)
         {
@@ -556,7 +559,7 @@ public class RaidSceneManager : MonoBehaviour
         }
     }
 
-    protected IEnumerator ExecuteCampEffectGroup(bool allowSkipping, float waitTime, List<FormationUnit> targets, 
+    private IEnumerator ExecuteCampEffectGroup(bool allowSkipping, float waitTime, List<FormationUnit> targets, 
         Predicate<CampEffectType> nextTypeSelector)
     {
         bool skipNotification = false;
@@ -602,7 +605,7 @@ public class RaidSceneManager : MonoBehaviour
         }
     }
 
-    protected virtual IEnumerator HallwayLoadingEvent(HallSector hallSector, HallTransitionType transitionType, Direction direction, DungeonRoom fromRoom = null)
+    private IEnumerator HallwayLoadingEvent(HallSector hallSector, HallTransitionType transitionType, Direction direction, DungeonRoom fromRoom = null)
     {
         #region Set restrictions
         QuestPanel.DisableRetreat(false);
@@ -706,7 +709,7 @@ public class RaidSceneManager : MonoBehaviour
             for (int i = 0; i < HeroParty.Units.Count; i++)
                 yield return StartCoroutine(ExecuteRandomDialog(HeroParty.Units[i], "str_bark_increasingstress"));
 
-            yield return StartCoroutine(ExecuteEffectEvents(false));
+            yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(false));
             yield return new WaitForSeconds(0.3f);
             yield return ProcessRaidFailure();
             EnablePartyMovement();
@@ -724,7 +727,7 @@ public class RaidSceneManager : MonoBehaviour
         #endregion
     }
 
-    protected virtual IEnumerator RoomLoadingEvent(DungeonRoom room, RoomTransitionType transitionType, RaidHallSector fromRaidSector = null)
+    private IEnumerator RoomLoadingEvent(DungeonRoom room, RoomTransitionType transitionType, RaidHallSector fromRaidSector = null)
     {
         #region Set restrictions
         QuestPanel.DisableRetreat(false);
@@ -830,7 +833,7 @@ public class RaidSceneManager : MonoBehaviour
             foreach (var hero in Formations.Heroes.Party.Units)
                 hero.SetCombatAnimation(false);
 
-            yield return StartCoroutine(ExecuteEffectEvents(false));
+            yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(false));
             yield return new WaitForSeconds(0.3f);
             yield return ProcessRaidFailure();
         }
@@ -862,7 +865,7 @@ public class RaidSceneManager : MonoBehaviour
             for (int i = 0; i < HeroParty.Units.Count; i++)
                 yield return StartCoroutine(ExecuteRandomDialog(HeroParty.Units[i], "str_bark_increasingstress"));
 
-            yield return StartCoroutine(ExecuteEffectEvents(false, 0.3f));
+            yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(false, 0.3f));
             yield return ProcessRaidFailure();
         }
         EnablePartyMovement();
@@ -916,7 +919,7 @@ public class RaidSceneManager : MonoBehaviour
         #endregion
     }
 
-    protected virtual IEnumerator CampingEvent(DungeonRoom room)
+    private IEnumerator CampingEvent(DungeonRoom room)
     {
         if (SceneState != DungeonSceneState.Room)
             yield break;
@@ -1017,7 +1020,7 @@ public class RaidSceneManager : MonoBehaviour
                 if (RaidEvents.MealEvent.SelectedMealSlot.FoodRank == 3)
                     yield return new WaitForSeconds(0.2f);
 
-                yield return StartCoroutine(ExecuteEffectEvents(false, 0.6f));
+                yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(false, 0.6f));
                 yield return ProcessRaidFailure();
                 break;
         }
@@ -1180,7 +1183,7 @@ public class RaidSceneManager : MonoBehaviour
         #endregion
     }
 
-    protected virtual IEnumerator RaidResultsEvent()
+    private IEnumerator RaidResultsEvent()
     {
         RaidInterface.CanvasGroup.blocksRaycasts = false;
 
@@ -1218,7 +1221,7 @@ public class RaidSceneManager : MonoBehaviour
         resultWindow.EnableInteraction();
     }
 
-    protected virtual IEnumerator RaidResultsHeroTransition()
+    private IEnumerator RaidResultsHeroTransition()
     {
         DarkestDungeonManager.ScreenFader.Fade();
         yield return new WaitForSeconds(1f);
@@ -1228,7 +1231,7 @@ public class RaidSceneManager : MonoBehaviour
         resultWindow.EnableInteraction();
     }
 
-    protected virtual IEnumerator RaidResultsTownTransition()
+    private IEnumerator RaidResultsTownTransition()
     {
         DarkestDungeonManager.ScreenFader.Fade();
         DarkestSoundManager.StopDungeonSoundtrack();
@@ -1645,7 +1648,7 @@ public class RaidSceneManager : MonoBehaviour
             HeartAttackCheckQueue.Add(unit);
     }
 
-    protected virtual bool PrepareDeath(FormationUnit targetUnit, DeathFactor deathFactor = DeathFactor.AttackMonster, FormationUnit killer = null)
+    private bool PrepareDeath(FormationUnit targetUnit, DeathFactor deathFactor = DeathFactor.AttackMonster, FormationUnit killer = null)
     {
         if (targetUnit.Character.IsMonster)
         {
@@ -1738,158 +1741,6 @@ public class RaidSceneManager : MonoBehaviour
         }
     }
 
-    protected virtual void ExecuteDeath(FormationUnit targetUnit)
-    {
-        if (targetUnit.CombatInfo.IsDead)
-        {
-            if (targetUnit.Character.IsMonster)
-            {
-                if (RaidEvents.MonsterTooltip.Slot == targetUnit.OverlaySlot)
-                    RaidEvents.MonsterTooltip.Hide();
-                Monster monster = targetUnit.Character as Monster;
-
-                if (monster.SkillReaction != null && monster.SkillReaction.WasKilledOtherMonstersEffects.Count > 0)
-                {
-                    for (int i = 0; i < targetUnit.Party.Units.Count; i++)
-                        for (int j = 0; j < monster.SkillReaction.WasKilledOtherMonstersEffects.Count; j++)
-                            for (int k = 0; k < monster.SkillReaction.WasKilledOtherMonstersEffects[j].SubEffects.Count; k++)
-                                monster.SkillReaction.WasKilledOtherMonstersEffects[j].SubEffects[k].
-                                    Apply(targetUnit.Party.Units[i], targetUnit.Party.Units[i],
-                                    monster.SkillReaction.WasKilledOtherMonstersEffects[j]);
-                }
-
-                var companionRecord = BattleGround.Companions.Find(record =>
-                record.TargetUnit == targetUnit || record.CompanionUnit == targetUnit);
-                if (companionRecord != null)
-                {
-                    BattleGround.Companions.Remove(companionRecord);
-
-                    if (companionRecord.CompanionUnit == targetUnit)
-                    {
-                        foreach (var buff in companionRecord.CompanionComponent.Buffs)
-                            companionRecord.TargetUnit.Character.RemoveSourceBuff(buff, BuffSourceType.Adventure);
-                        companionRecord.TargetUnit.OverlaySlot.UpdateOverlay();
-                    }
-                }
-
-                if (monster.Data.ControllerCaptor != null)
-                {
-                    var controlRecord = BattleGround.Controls.Find(control => control.ControllUnit == targetUnit);
-                    if (controlRecord != null)
-                        BattleGround.UncontrolUnit(controlRecord);
-                }
-                if (monster.Data.FullCaptor != null)
-                {
-                    var captureRecord = BattleGround.Captures.Find(capture => capture.CaptorUnit == targetUnit);
-                    if (captureRecord != null)
-                        BattleGround.ReleaseUnit(captureRecord);
-
-                    if (monster.Data.LifeLink != null && BattleGround.IsLifeLinked(targetUnit, monster.Data.LifeLink))
-                    {
-                        MonsterData emptyCaptorData = DarkestDungeonManager.Data.Monsters[monster.Data.FullCaptor.EmptyMonsterClass];
-                        GameObject unitObject = Resources.Load("Prefabs/Monsters/" + emptyCaptorData.TypeId) as GameObject;
-                        BattleGround.ReplaceUnit(emptyCaptorData, targetUnit, unitObject);
-                    }
-                    else
-                    {
-                        UnitEventQueue.RemoveAll(item => item == targetUnit);
-                        BattleGround.UnitDestroyed(targetUnit);
-                        Formations.Monsters.DeleteUnit(targetUnit);
-                    }
-                }
-                else if (monster.Data.DeathClass != null)
-                {
-                    if (monster.Data.DeathClass.Type == DeathClassType.Corpse)
-                    {
-                        targetUnit.SetCorpseAnimation(true);
-                        BattleGround.UnitCorpsed(targetUnit);
-                        Formations.Monsters.SpawnCorpse(targetUnit,
-                            new Monster(DarkestDungeonManager.Data.Monsters[monster.Data.DeathClass.CorpseClass]));
-                    }
-                    else
-                    {
-                        var deathClass = monster.Data.DeathClass;
-                        UnitEventQueue.RemoveAll(item => item == targetUnit);
-                        MonsterData replacementData = DarkestDungeonManager.Data.Monsters[monster.Data.DeathClass.CorpseClass];
-                        GameObject unitObject = Resources.Load("Prefabs/Monsters/" + replacementData.TypeId) as GameObject;
-                        var finalUnit = BattleGround.ReplaceUnit(replacementData, targetUnit, unitObject, false, 1);
-
-                        for (int i = 0; i < deathClass.DeathChangeEffects.Count; i++)
-                            for (int j = 0; j < deathClass.DeathChangeEffects[i].SubEffects.Count; j++)
-                                deathClass.DeathChangeEffects[i].SubEffects[j].
-                                    ApplyInstant(finalUnit, finalUnit, deathClass.DeathChangeEffects[i]);
-                    }
-                }
-                else
-                {
-                    UnitEventQueue.RemoveAll(item => item == targetUnit);
-                    BattleGround.UnitDestroyed(targetUnit);
-                    Formations.Monsters.DeleteUnit(targetUnit);
-
-                    if (BattleGround.SharedHealth.IsActive)
-                        if (BattleGround.SharedHealth.SharedUnits.Contains(targetUnit))
-                            for (int i = 0; i < BattleGround.SharedHealth.SharedUnits.Count; i++)
-                                if (BattleGround.MonsterParty.Units.Contains(BattleGround.SharedHealth.SharedUnits[i]))
-                                    ExecuteDeath(BattleGround.SharedHealth.SharedUnits[i]);
-
-                    if (BattleGround.SharedHealth.IsActive)
-                        BattleGround.SharedHealth.Reset();
-                }
-            }
-            else if (targetUnit.Character is Hero)
-            {
-                #region Captures and Controls
-                var captureRecord = BattleGround.Captures.Find(capture => capture.PrisonerUnit == targetUnit);
-                if (captureRecord != null)
-                {
-                    var monster = captureRecord.CaptorUnit.Character as Monster;
-                    BattleGround.ReleaseUnit(captureRecord);
-
-                    if (monster.Data.LifeLink != null && BattleGround.IsLifeLinked(captureRecord.CaptorUnit, monster.Data.LifeLink))
-                    {
-                        MonsterData emptyCaptorData = DarkestDungeonManager.Data.Monsters[monster.Data.FullCaptor.EmptyMonsterClass];
-                        GameObject unitObject = Resources.Load("Prefabs/Monsters/" + emptyCaptorData.TypeId) as GameObject;
-                        BattleGround.ReplaceUnit(emptyCaptorData, captureRecord.CaptorUnit, unitObject);
-                    }
-                    else
-                    {
-                        UnitEventQueue.RemoveAll(item => item == targetUnit);
-                        BattleGround.UnitDestroyed(targetUnit);
-                        Formations.Monsters.DeleteUnit(targetUnit);
-                    }
-                }
-                var controlRecord = BattleGround.Controls.Find(control => control.PrisonerUnit == targetUnit);
-                if (controlRecord != null)
-                    BattleGround.Controls.Remove(controlRecord);
-                #endregion
-
-                var heroInfo = CurrentRaid.RaidParty.HeroInfo.Find(info => info.Hero == targetUnit.Character as Hero);
-                heroInfo.IsAlive = false;
-                heroInfo.DeathRecord = new DeathRecord()
-                {
-                    HeroClassIndex = heroInfo.Hero.ClassIndexId,
-                    HeroName = heroInfo.Hero.Name,
-                    KillerName = "necromancer_A",
-                    ResolveLevel = heroInfo.Hero.Resolve.Level,
-                    Factor = DeathFactor.AttackMonster,
-                };
-                UnitEventQueue.RemoveAll(item => item == targetUnit);
-                ResolveCheckQueue.RemoveAll(item => item == targetUnit);
-                HeartAttackCheckQueue.RemoveAll(item => item == targetUnit);
-                DeathDoorEnterQueue.RemoveAll(item => item == targetUnit);
-                BattleGround.UnitDestroyed(targetUnit);
-                targetUnit.Formation.DeleteUnit(targetUnit);
-                if (RaidPanel.SelectedUnit == targetUnit)
-                {
-                    if (Formations.Heroes.Party.Units.Count > 0)
-                        Formations.Heroes.Party.Units[0].OverlaySlot.UnitSelected();
-                }
-                for (int i = 0; i < BattleGround.HeroParty.Units.Count; i++)
-                    DarkestDungeonManager.Data.Effects["Stress 2"].ApplyIndependent(BattleGround.HeroParty.Units[i]);
-            }
-        }
-    }
-
     protected bool ProcessDamage(FormationUnit unit, int damage)
     {
         unit.Character.TakeDamage(damage);
@@ -1971,11 +1822,11 @@ public class RaidSceneManager : MonoBehaviour
         yield return new WaitForSeconds(waitBefore);
 
         for (int i = HeroParty.Units.Count - 1; i >= 0; i--)
-            ExecuteDeath(HeroParty.Units[i]);
+            _effectEventsExecutor.ExecuteDeath(HeroParty.Units[i]);
 
         yield return new WaitForSeconds(waitAfter);
 
-        yield return StartCoroutine(ExecuteEffectEvents(false));
+        yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(false));
 
         yield return ProcessRaidFailure();
     }
@@ -1999,7 +1850,7 @@ public class RaidSceneManager : MonoBehaviour
 
     #region Battle Round
 
-    protected virtual IEnumerator LoadEncounterEvent(IRaidArea areaView)
+    private IEnumerator LoadEncounterEvent(IRaidArea areaView)
     {
         SetEncounterState();
 
@@ -2037,7 +1888,7 @@ public class RaidSceneManager : MonoBehaviour
         yield return StartCoroutine(FinishEncouter(areaView));
     }
 
-    protected virtual IEnumerator EncounterEvent(IRaidArea areaView, bool campfireAmbush = false)
+    private IEnumerator EncounterEvent(IRaidArea areaView, bool campfireAmbush = false)
     {
         SetEncounterState();
 
@@ -2141,7 +1992,7 @@ public class RaidSceneManager : MonoBehaviour
         yield return StartCoroutine(FinishEncouter(areaView));
     }
 
-    protected virtual IEnumerator FinishEncouter(IRaidArea areaView)
+    private IEnumerator FinishEncouter(IRaidArea areaView)
     {
         yield return StartCoroutine(ProcessTransformationsAfterBattle());
 
@@ -2322,7 +2173,7 @@ public class RaidSceneManager : MonoBehaviour
         CurrentEvent = null;
     }
 
-    protected virtual IEnumerator CompletionCrestEvent()
+    private IEnumerator CompletionCrestEvent()
     {
         Raid.QuestCompleted = true;
         CompletionWindow.Appear();
@@ -2342,7 +2193,7 @@ public class RaidSceneManager : MonoBehaviour
         yield return new WaitForSeconds(1f);
     }
 
-    protected virtual IEnumerator BattleRound(bool fromBattleSave = false)
+    private IEnumerator BattleRound(bool fromBattleSave = false)
     {
         if (fromBattleSave == false)
         {
@@ -2363,7 +2214,7 @@ public class RaidSceneManager : MonoBehaviour
                             stallEffect.SubEffects[j].Apply(BattleGround.HeroParty.Units[i],
                                 BattleGround.HeroParty.Units[i], stallEffect);
 
-                    yield return StartCoroutine(ExecuteEffectEvents(false));
+                    yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(false));
                 }
                 else if (BattleGround.StallingRoundNumber == 4)
                 {
@@ -2413,7 +2264,7 @@ public class RaidSceneManager : MonoBehaviour
                     for (int i = 0; i < TempList.Count; i++)
                     {
                         if (TempList[i].CombatInfo.IsDead)
-                            ExecuteDeath(TempList[i]);
+                            _effectEventsExecutor.ExecuteDeath(TempList[i]);
                     }
                 }
                 TempList.Clear();
@@ -2465,7 +2316,7 @@ public class RaidSceneManager : MonoBehaviour
 
                     yield return new WaitForSeconds(1.2f);
 
-                    yield return StartCoroutine(ExecuteEffectEvents(true));
+                    yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(true));
                 }
                 #endregion
             }
@@ -2609,7 +2460,7 @@ public class RaidSceneManager : MonoBehaviour
                                 RaidEvents.ShowPopupMessage(BattleGround.Captures[i].PrisonerUnit, PopupMessageType.DeathBlow);
                                 yield return new WaitForSeconds(1.4f);
                                 BattleGround.Round.PostHeroTurn();
-                                ExecuteDeath(BattleGround.Captures[i].PrisonerUnit);
+                                _effectEventsExecutor.ExecuteDeath(BattleGround.Captures[i].PrisonerUnit);
                                 yield break;
                             }
                             else
@@ -2642,7 +2493,7 @@ public class RaidSceneManager : MonoBehaviour
                                     Formations.ShowUnitOverlay();
                                     Formations.ResetSelections();
                                     yield return new WaitForSeconds(0.075f);
-                                    yield return StartCoroutine(ExecuteEffectEvents(true));
+                                    yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(true));
                                 }
                             }
                         }
@@ -2702,7 +2553,7 @@ public class RaidSceneManager : MonoBehaviour
                         }
 
                         yield return new WaitForSeconds(0.075f);
-                        yield return StartCoroutine(ExecuteEffectEvents(true));
+                        yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(true));
                     }
                     #endregion
                 }
@@ -2735,7 +2586,7 @@ public class RaidSceneManager : MonoBehaviour
                         {
                             PrepareDeath(BattleGround.MonsterParty.Units[i]);
                             yield return new WaitForSeconds(1.2f);
-                            ExecuteDeath(BattleGround.MonsterParty.Units[i]);
+                            _effectEventsExecutor.ExecuteDeath(BattleGround.MonsterParty.Units[i]);
                             yield return new WaitForSeconds(0.3f);
                         }
                     }
@@ -2857,7 +2708,7 @@ public class RaidSceneManager : MonoBehaviour
         {
             yield return new WaitForSeconds(1.4f);
             for (int i = 0; i < TempList.Count; i++)
-                ExecuteDeath(TempList[i]);
+                _effectEventsExecutor.ExecuteDeath(TempList[i]);
             yield return new WaitForSeconds(0.2f);
         }
         else if (hasIdleDamage)
@@ -2868,7 +2719,7 @@ public class RaidSceneManager : MonoBehaviour
         #endregion
     }
 
-    protected virtual IEnumerator HeroTurn(FormationUnit actionUnit, bool fromBattleSave = false)
+    private IEnumerator HeroTurn(FormationUnit actionUnit, bool fromBattleSave = false)
     {
         if(fromBattleSave == false)
         {
@@ -2890,13 +2741,13 @@ public class RaidSceneManager : MonoBehaviour
                 {
                     yield return new WaitForSeconds(1.4f);
                     BattleGround.Round.PostHeroTurn();
-                    ExecuteDeath(actionUnit);
-                    yield return StartCoroutine(ExecuteEffectEvents(true));
+                    _effectEventsExecutor.ExecuteDeath(actionUnit);
+                    yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(true));
                     yield break;
                 }
 
                 yield return new WaitForSeconds(actionUnit.Character.AtDeathsDoor ? 0.6f : 0.3f);
-                yield return StartCoroutine(ExecuteEffectEvents(true));
+                yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(true));
             }
 
             if (actionUnit.Character.GetStatusEffect(StatusType.Poison).IsApplied)
@@ -2908,13 +2759,13 @@ public class RaidSceneManager : MonoBehaviour
                 {
                     yield return new WaitForSeconds(1.4f);
                     BattleGround.Round.PostHeroTurn();
-                    ExecuteDeath(actionUnit);
-                    yield return StartCoroutine(ExecuteEffectEvents(true));
+                    _effectEventsExecutor.ExecuteDeath(actionUnit);
+                    yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(true));
                     yield break;
                 }
 
                 yield return new WaitForSeconds(actionUnit.Character.AtDeathsDoor ? 0.6f : 0.3f);
-                yield return StartCoroutine(ExecuteEffectEvents(true));
+                yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(true));
             }
 
             if (actionUnit.CombatInfo.IsSurprised)
@@ -2969,7 +2820,7 @@ public class RaidSceneManager : MonoBehaviour
                 }
 
                 yield return new WaitForSeconds(0.075f);
-                yield return StartCoroutine(ExecuteEffectEvents(true));
+                yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(true));
             }
             #endregion
 
@@ -3001,7 +2852,7 @@ public class RaidSceneManager : MonoBehaviour
                             {
                                 yield return new WaitForSeconds(1.4f);
                                 BattleGround.Round.PostHeroTurn();
-                                ExecuteDeath(actionUnit);
+                                _effectEventsExecutor.ExecuteDeath(actionUnit);
                                 yield break;
                             }
                             else
@@ -3028,7 +2879,7 @@ public class RaidSceneManager : MonoBehaviour
                             actionUnit.SetDefendAnimation(false);
                             yield return new WaitForSeconds(0.1f);
 
-                            yield return StartCoroutine(ExecuteEffectEvents(false));
+                            yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(false));
                         }
                         break;
                         #endregion
@@ -3045,7 +2896,7 @@ public class RaidSceneManager : MonoBehaviour
                         for (int i = 0; i < barkStressEffect.SubEffects.Count; i++)
                             barkStressEffect.SubEffects[i].Apply(actionUnit, barkTarget, barkStressEffect);
                         yield return new WaitForSeconds(0.1f);
-                        yield return StartCoroutine(ExecuteEffectEvents(false));
+                        yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(false));
                         break;
                         #endregion
                     case StartTurnActType.BuffAlly:
@@ -3061,7 +2912,7 @@ public class RaidSceneManager : MonoBehaviour
                         for (int i = 0; i < buffAllyEffect.SubEffects.Count; i++)
                             buffAllyEffect.SubEffects[i].Apply(actionUnit, buffAllyTarget, buffAllyEffect);
                         yield return new WaitForSeconds(0.1f);
-                        yield return StartCoroutine(ExecuteEffectEvents(false));
+                        yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(false));
                         break;
                         #endregion
                     case StartTurnActType.BuffParty:
@@ -3075,7 +2926,7 @@ public class RaidSceneManager : MonoBehaviour
                                 buffPartyEffect.SubEffects[i].Apply(actionUnit, actionUnit.Party.Units[j], buffPartyEffect);
 
                         yield return new WaitForSeconds(0.1f);
-                        yield return StartCoroutine(ExecuteEffectEvents(false));
+                        yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(false));
                         break;
                         #endregion
                     case StartTurnActType.ChangePosition:
@@ -3147,7 +2998,7 @@ public class RaidSceneManager : MonoBehaviour
                         for (int i = 0; i < markSelfEffect.SubEffects.Count; i++)
                             markSelfEffect.SubEffects[i].Apply(actionUnit, actionUnit, markSelfEffect);
                         yield return new WaitForSeconds(0.1f);
-                        yield return StartCoroutine(ExecuteEffectEvents(false));
+                        yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(false));
                         break;
                         #endregion
                     case StartTurnActType.RandomCommand:
@@ -3196,7 +3047,7 @@ public class RaidSceneManager : MonoBehaviour
                                 stressHealPartyEffect.SubEffects[i].Apply(actionUnit, actionUnit.Party.Units[j], stressHealPartyEffect);
 
                         yield return new WaitForSeconds(0.1f);
-                        yield return StartCoroutine(ExecuteEffectEvents(false));
+                        yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(false));
                         break;
                         #endregion
                     case StartTurnActType.StressHealSelf:
@@ -3206,7 +3057,7 @@ public class RaidSceneManager : MonoBehaviour
                         for (int i = 0; i < stressHealSelfEffect.SubEffects.Count; i++)
                             stressHealSelfEffect.SubEffects[i].Apply(actionUnit, actionUnit, stressHealSelfEffect);
                         yield return new WaitForSeconds(0.1f);
-                        yield return StartCoroutine(ExecuteEffectEvents(false));
+                        yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(false));
                         break;
                         #endregion
                 }
@@ -3494,7 +3345,7 @@ public class RaidSceneManager : MonoBehaviour
         BattleGround.Round.PostHeroTurn();
     }
 
-    protected virtual IEnumerator MonsterTurn(FormationUnit actionUnit, string combatSkillOverride = null, bool fromBonusTurn = false)
+    private IEnumerator MonsterTurn(FormationUnit actionUnit, string combatSkillOverride = null, bool fromBonusTurn = false)
     {
         FMODUnity.RuntimeManager.PlayOneShot("event:/general/char/enemy_turn");
         Formations.ResetSelections();
@@ -3522,12 +3373,12 @@ public class RaidSceneManager : MonoBehaviour
                     DeathDamage deathDamage = actionUnit.Character.DeathDamage;
                     yield return new WaitForSeconds(1.4f);
                     BattleGround.Round.PostMonsterTurn();
-                    ExecuteDeath(actionUnit);
+                    _effectEventsExecutor.ExecuteDeath(actionUnit);
 
                     if (ProcessDeathDamage(deathDamage))
                         yield return new WaitForSeconds(0.4f);
 
-                    yield return StartCoroutine(ExecuteEffectEvents(true));
+                    yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(true));
                     yield break;
                 }
 
@@ -3544,12 +3395,12 @@ public class RaidSceneManager : MonoBehaviour
                     DeathDamage deathDamage = actionUnit.Character.DeathDamage;
                     yield return new WaitForSeconds(1.4f);
                     BattleGround.Round.PostMonsterTurn();
-                    ExecuteDeath(actionUnit);
+                    _effectEventsExecutor.ExecuteDeath(actionUnit);
 
                     if (ProcessDeathDamage(deathDamage))
                         yield return new WaitForSeconds(0.4f);
 
-                    yield return StartCoroutine(ExecuteEffectEvents(true));
+                    yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(true));
                     yield break;
                 }
 
@@ -3593,7 +3444,7 @@ public class RaidSceneManager : MonoBehaviour
                 BattleGround.Round.PostMonsterTurn();
     }
 
-    protected virtual IEnumerator BonusTurn(Predicate<BonusInitiativeDesire> desireSelector)
+    private IEnumerator BonusTurn(Predicate<BonusInitiativeDesire> desireSelector)
     {
         TempList.AddRange(BattleGround.MonsterParty.Units);
         while (TempList.Count > 0)
@@ -3640,7 +3491,7 @@ public class RaidSceneManager : MonoBehaviour
 
     #region Skill Usage
 
-    protected virtual void ExecuteSkillInstants(FormationUnit performer, SkillTargetInfo targetInfo, SkillResult skillResult)
+    private void ExecuteSkillInstants(FormationUnit performer, SkillTargetInfo targetInfo, SkillResult skillResult)
     {
         foreach (var skillEntry in skillResult.SkillEntries)
         {
@@ -3720,7 +3571,7 @@ public class RaidSceneManager : MonoBehaviour
         performer.OverlaySlot.UpdateOverlay();
     }
 
-    protected virtual void ExecuteSlidingSetup(FormationUnit performer, SkillTargetInfo targetInfo)
+    private void ExecuteSlidingSetup(FormationUnit performer, SkillTargetInfo targetInfo)
     {
         if(performer.Team == Team.Monsters)
         {
@@ -3756,7 +3607,7 @@ public class RaidSceneManager : MonoBehaviour
         }
     }
 
-    protected virtual void ExecuteRiposteAnimationIntro(FormationUnit performer, SkillTargetInfo targetInfo)
+    private void ExecuteRiposteAnimationIntro(FormationUnit performer, SkillTargetInfo targetInfo)
     {
         if (RiposteResults.Count > 0)
         {
@@ -3771,7 +3622,7 @@ public class RaidSceneManager : MonoBehaviour
         }
     }
 
-    protected virtual void ExecuteSkillAnimationIntro(FormationUnit performer, SkillTargetInfo targetInfo)
+    private void ExecuteSkillAnimationIntro(FormationUnit performer, SkillTargetInfo targetInfo)
     {
         if (targetInfo.Skill.ValidModes.Count > 1 && targetInfo.Mode != null)
             Formations.UnitSkillIntroOverriden(performer, targetInfo.SkillArtInfo, targetInfo.Mode.Id);
@@ -3837,7 +3688,7 @@ public class RaidSceneManager : MonoBehaviour
         }
     }
 
-    protected virtual void ExecuteSkillAnimationOutro(FormationUnit performer, SkillTargetInfo targetInfo)
+    private void ExecuteSkillAnimationOutro(FormationUnit performer, SkillTargetInfo targetInfo)
     {
         if (RiposteResults.Count > 0)
         {
@@ -3872,7 +3723,7 @@ public class RaidSceneManager : MonoBehaviour
         Riposters.Clear();
     }
 
-    protected virtual void ExecuteGuardRedirection(FormationUnit performer, SkillTargetInfo targetInfo)
+    private void ExecuteGuardRedirection(FormationUnit performer, SkillTargetInfo targetInfo)
     {
         if (targetInfo.Type == SkillTargetType.Enemy)
             for (int i = targetInfo.Targets.Count - 1; i >= 0; i--)
@@ -3884,7 +3735,7 @@ public class RaidSceneManager : MonoBehaviour
                 }
     }
 
-    protected virtual void ExecuteRiposteSkillActivation(FormationUnit performer, SkillTargetInfo targetInfo)
+    private void ExecuteRiposteSkillActivation(FormationUnit performer, SkillTargetInfo targetInfo)
     {
         Riposters.Clear();
         RiposteResults.Clear();
@@ -3931,7 +3782,7 @@ public class RaidSceneManager : MonoBehaviour
         }
     }
 
-    protected virtual void ExecuteRiposteInstants(FormationUnit performer)
+    private void ExecuteRiposteInstants(FormationUnit performer)
     {
         for (int i = 0; i < Riposters.Count; i++)
         {
@@ -4000,7 +3851,7 @@ public class RaidSceneManager : MonoBehaviour
         }
     }
 
-    protected virtual void SetBrainDecisionMarkings(FormationUnit performer, MonsterBrainDecision brainDecision)
+    private void SetBrainDecisionMarkings(FormationUnit performer, MonsterBrainDecision brainDecision)
     {
         if (brainDecision.TargetInfo.Targets.Contains(performer))
             performer.SetFriendlyPerformerStatus(false);
@@ -4024,7 +3875,7 @@ public class RaidSceneManager : MonoBehaviour
         }
     }
 
-    protected virtual SkillResult ExecuteSkillBase(FormationUnit performer, SkillTargetInfo targetInfo)
+    private SkillResult ExecuteSkillBase(FormationUnit performer, SkillTargetInfo targetInfo)
     {
         BattleSolver.SkillResult.Reset();
         BattleGround.LastDamaged.Clear();
@@ -4070,7 +3921,7 @@ public class RaidSceneManager : MonoBehaviour
         return skillResult;
     }
 
-    protected virtual List<DeathDamage> ExecuteBattlegroundDeaths(FormationUnit peformer)
+    private List<DeathDamage> ExecuteBattlegroundDeaths(FormationUnit peformer)
     {
         List<DeathDamage> deathDamages = new List<DeathDamage>();
 
@@ -4093,7 +3944,7 @@ public class RaidSceneManager : MonoBehaviour
                 if (peformer.Character.DeathDamage != null)
                     deathDamages.Add(peformer.Character.DeathDamage);
 
-            ExecuteDeath(peformer);
+            _effectEventsExecutor.ExecuteDeath(peformer);
         }
 
         for (int i = BattleGround.HeroParty.Units.Count - 1; i >= 0; i--)
@@ -4102,7 +3953,7 @@ public class RaidSceneManager : MonoBehaviour
                 if (BattleGround.HeroParty.Units[i].Character.DeathDamage != null)
                     deathDamages.Add(BattleGround.HeroParty.Units[i].Character.DeathDamage);
 
-            ExecuteDeath(BattleGround.HeroParty.Units[i]);
+            _effectEventsExecutor.ExecuteDeath(BattleGround.HeroParty.Units[i]);
         }
 
         for (int i = BattleGround.MonsterParty.Units.Count - 1; i >= 0; i--)
@@ -4111,13 +3962,13 @@ public class RaidSceneManager : MonoBehaviour
                 if (BattleGround.MonsterParty.Units[i].Character.DeathDamage != null)
                     deathDamages.Add(BattleGround.MonsterParty.Units[i].Character.DeathDamage);
 
-            ExecuteDeath(BattleGround.MonsterParty.Units[i]);
+            _effectEventsExecutor.ExecuteDeath(BattleGround.MonsterParty.Units[i]);
         }
 
         return deathDamages;
     }
 
-    protected virtual IEnumerator ExecuteDeathDamages(List<DeathDamage> deathDamages)
+    private IEnumerator ExecuteDeathDamages(List<DeathDamage> deathDamages)
     {
         for (int i = 0; i < deathDamages.Count; i++)
         {
@@ -4136,7 +3987,7 @@ public class RaidSceneManager : MonoBehaviour
         }
     }
 
-    protected virtual IEnumerator ExecuteMonsterSkill(FormationUnit actionUnit, string combatSkillOverride = null)
+    private IEnumerator ExecuteMonsterSkill(FormationUnit actionUnit, string combatSkillOverride = null)
     {
         RaidEvents.MonsterTooltip.IsDisabled = true;
         RaidEvents.MonsterTooltip.Hide();
@@ -4281,7 +4132,7 @@ public class RaidSceneManager : MonoBehaviour
                 DarkestDungeonManager.Data.Effects["AfflictedAllyStress"].
                     ApplyIndependent(BattleGround.HeroParty.Units[j]);
 
-        yield return StartCoroutine(ExecuteEffectEvents(true));
+        yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(true));
 
         for (int i = 0; i < brainDecision.TargetInfo.Targets.Count; i++)
             BattleSolver.RemoveConditions(brainDecision.TargetInfo.Targets[i]);
@@ -4319,7 +4170,7 @@ public class RaidSceneManager : MonoBehaviour
                         foreach (SubEffect subEffect in barkStressEffect.SubEffects)
                             subEffect.Apply(skillEntry.Target, barkTarget, barkStressEffect);
                         yield return new WaitForSeconds(0.1f);
-                        yield return StartCoroutine(ExecuteEffectEvents(true));
+                        yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(true));
                         break;
                     }
                 }
@@ -4346,7 +4197,7 @@ public class RaidSceneManager : MonoBehaviour
                         foreach (SubEffect subEffect in barkStressEffect.SubEffects)
                             subEffect.Apply(ally, skillEntry.Target, barkStressEffect);
                         yield return new WaitForSeconds(0.1f);
-                        yield return StartCoroutine(ExecuteEffectEvents(true));
+                        yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(true));
                         break;
                     }
                 }
@@ -4358,7 +4209,7 @@ public class RaidSceneManager : MonoBehaviour
         #endregion
     }
 
-    protected virtual IEnumerator ExecuteHeroSkill(FormationUnit actionUnit, SkillTargetInfo targetInfo, CombatSkill skill)
+    private IEnumerator ExecuteHeroSkill(FormationUnit actionUnit, SkillTargetInfo targetInfo, CombatSkill skill)
     {
         RaidEvents.MonsterTooltip.IsDisabled = true;
         RaidEvents.MonsterTooltip.Hide();
@@ -4408,7 +4259,7 @@ public class RaidSceneManager : MonoBehaviour
         else if (skillResult.HasDeadEffect)
             DarkestDungeonManager.Data.Effects["Heal Stress Chance 1"].ApplyIndependent(actionUnit);
 
-        yield return StartCoroutine(ExecuteEffectEvents(true));
+        yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(true));
 
         for (int i = 0; i < targetInfo.Targets.Count; i++)
             BattleSolver.RemoveConditions(targetInfo.Targets[i]);
@@ -4439,7 +4290,7 @@ public class RaidSceneManager : MonoBehaviour
                     foreach (SubEffect subEffect in barkStressEffect.SubEffects)
                         subEffect.Apply(actionUnit.Party.Units[i], actionUnit, barkStressEffect);
                     yield return new WaitForSeconds(0.1f);
-                    yield return StartCoroutine(ExecuteEffectEvents(false));
+                    yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(false));
                     break;
                 }
             }
@@ -4448,7 +4299,7 @@ public class RaidSceneManager : MonoBehaviour
         #endregion
     }
 
-    protected virtual IEnumerator ExecuteHeroItemUsage(FormationUnit actionUnit, InventorySlot slot)
+    private IEnumerator ExecuteHeroItemUsage(FormationUnit actionUnit, InventorySlot slot)
     {
         if (actionUnit == null || slot.HasItem == false)
         {
@@ -4640,89 +4491,7 @@ public class RaidSceneManager : MonoBehaviour
 
     #endregion
 
-    protected virtual IEnumerator ExecuteResolveChecks()
-    {
-        while(ResolveCheckQueue.Count > 0)
-        {
-            var resolveUnit = ResolveCheckQueue[0];
-            var resolveHero = resolveUnit.Character as Hero;
-            ResolveCheckQueue.RemoveAt(0);
-            float virtueChance = 0.25f + resolveUnit.Character[AttributeType.ResolveCheckPercent].ModifiedValue;
-            virtueChance = Mathf.Clamp(virtueChance, 0.01f, 0.6f);
-            bool isVirtue = RandomSolver.CheckSuccess(virtueChance);
-            var availableTraits = isVirtue ? DarkestDungeonManager.Data.Traits.FindAll(trait => trait.Type == OverstressType.Virtue) :
-                DarkestDungeonManager.Data.Traits.FindAll(trait => trait.Type == OverstressType.Affliction);
-            Trait resolveTrait = availableTraits[RandomSolver.Next(availableTraits.Count)];
-
-            if (!isVirtue)
-                for (int i = 0; i < resolveUnit.Party.Units.Count; i++)
-                    if (resolveUnit.Party.Units[i] != resolveUnit)
-                        DarkestDungeonManager.Data.Effects["AfflictedAllyStress"].
-                            ApplyIndependent(resolveUnit.Party.Units[i]);
-
-            if (!isVirtue && resolveUnit.Character.Mode != null && resolveUnit.Character.Mode.AfflictionSkillId != null)
-            {
-                var resolveSkill = resolveHero.SelectedCombatSkills.Find(skill =>
-                skill.Id == resolveUnit.Character.Mode.AfflictionSkillId);
-                if (resolveSkill != null)
-                {
-                    SkillTargetInfo targetInfo = BattleSolver.SelectSkillTargets(resolveUnit, 
-                        resolveUnit, resolveSkill).UpdateSkillInfo(resolveUnit, resolveSkill);
-                    yield return StartCoroutine(ExecuteHeroSkill(resolveUnit, targetInfo, resolveSkill));
-                }
-            }
-
-            RaidEvents.ShowAnnouncment(string.Format(LocalizationManager.GetString("resolve_test"), resolveUnit.Character.Name));
-
-            FMODUnity.RuntimeManager.PlayOneShot("event:/general/char/resolve_test");
-            yield return new WaitForSeconds(1.6f);
-            RaidEvents.HideAnnouncment();
-            Formations.HideUnitOverlay();
-            yield return new WaitForSeconds(0.1f);
-            DungeonCamera.SwitchBlur(true);
-
-            Rules.GetIdleUnitRules(resolveUnit);
-            resolveHero.ApplyTrait(resolveTrait);
-            resolveHero.ApplySingleBuffRule(Rules, BuffRule.Afflicted);
-            resolveHero.ApplySingleBuffRule(Rules, BuffRule.Virtued);
-
-            if(isVirtue)
-            {
-                DarkestSoundManager.ExecuteNarration("virtue", NarrationPlace.Raid, resolveTrait.Id);
-                FMODUnity.RuntimeManager.PlayOneShot("event:/general/char/resolve_virtue");
-            }
-            else
-            {
-                DarkestSoundManager.ExecuteNarration("afflicted", NarrationPlace.Raid, resolveTrait.Id);
-                FMODUnity.RuntimeManager.PlayOneShot("event:/general/char/resolve_afflict");
-            }
-
-            Formations.HeroResolveCheckIntro(resolveUnit, isVirtue);
-            Formations.PartyBuffPositions.SetUnitTarget(resolveUnit, 0.05f, Vector2.zero);
-            RaidEvents.ShowAnnouncment(isVirtue ? 
-                LocalizationManager.GetString("str_virtue_name_" + resolveTrait.Id):
-                LocalizationManager.GetString("str_affliction_name_" + resolveTrait.Id), AnnouncmentPosition.Bottom);
-            if(!Rules.IsDoingCamping)
-                DungeonCamera.Zoom(45, 0.1f);
-
-            yield return new WaitForSeconds(2.45f);
-            if(!Rules.IsDoingCamping)
-                DungeonCamera.Zoom(DungeonCamera.StandardFOV, 0.1f);
-
-            Formations.HeroResolveCheckOutro(resolveUnit, isVirtue);
-            DungeonCamera.SwitchBlur(false);
-            yield return new WaitForSeconds(0.15f);
-            if (isVirtue)
-                resolveUnit.Character.Stress.CurrentValue = RandomSolver.Next(20, 40);
-            resolveUnit.OverlaySlot.UpdateOverlay();
-
-            RaidEvents.HideAnnouncment();
-            Formations.ShowUnitOverlay();
-            yield return new WaitForSeconds(0.15f);
-        }
-    }
-
-    protected virtual IEnumerator ExecuteRoundAdvance()
+    private IEnumerator ExecuteRoundAdvance()
     {
         roundAdvanceCounter++;
 
@@ -4769,7 +4538,7 @@ public class RaidSceneManager : MonoBehaviour
             timeWasted += 0.6f;
 
             float coroutineTime = Time.time;
-            yield return StartCoroutine(ExecuteEffectEvents(false));
+            yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(false));
             UnitEventQueue.AddRange(Formations.Heroes.Party.Units);
             timeWasted += Time.time - coroutineTime;
         }
@@ -4807,7 +4576,7 @@ public class RaidSceneManager : MonoBehaviour
             timeWasted += 0.6f;
 
             float coroutineTime = Time.time;
-            yield return StartCoroutine(ExecuteEffectEvents(false));
+            yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(false));
             UnitEventQueue.AddRange(Formations.Heroes.Party.Units);
             timeWasted += Time.time - coroutineTime;
         }
@@ -4827,20 +4596,20 @@ public class RaidSceneManager : MonoBehaviour
             yield return new WaitForSeconds(1.4f - timeWasted);
             timeWasted += 1.4f - timeWasted;
             for (int i = 0; i < bleedDeaths.Count; i++)
-                ExecuteDeath(bleedDeaths[i]);
+                _effectEventsExecutor.ExecuteDeath(bleedDeaths[i]);
             bleedDeaths.Clear();
         }
         if(poisonDeaths.Count > 0)
         {
             yield return new WaitForSeconds(2 - timeWasted);
             for (int i = 0; i < poisonDeaths.Count; i++)
-                ExecuteDeath(poisonDeaths[i]);
+                _effectEventsExecutor.ExecuteDeath(poisonDeaths[i]);
             poisonDeaths.Clear();
         }
 
         #endregion
 
-        yield return StartCoroutine(ExecuteEffectEvents(false));
+        yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(false));
         UnitEventQueue.Clear();
 
         #region Comment on Movement
@@ -4862,7 +4631,7 @@ public class RaidSceneManager : MonoBehaviour
                         for (int i = 0; i < barkStressEffect.SubEffects.Count; i++)
                             barkStressEffect.SubEffects[i].Apply(heroBarker, barkTarget, barkStressEffect);
                         yield return new WaitForSeconds(0.1f);
-                        yield return StartCoroutine(ExecuteEffectEvents(false));
+                        yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(false));
                         break;
                     }
                 }
@@ -4876,169 +4645,7 @@ public class RaidSceneManager : MonoBehaviour
         roundAdvanceCounter--;
     }
 
-    protected virtual IEnumerator ExecuteEffectEvents(bool includeMonsters, float waitAfter = 0.0f)
-    {
-        executingEffectEvent = true;
-        bool executedEvent;
-
-        for (int i = 0; i < BattleGround.HeroParty.Units.Count; i++)
-            BattleGround.HeroParty.Units[i].StackEvents();
-        if (includeMonsters)
-            for (int i = 0; i < BattleGround.MonsterParty.Units.Count; i++)
-                BattleGround.MonsterParty.Units[i].StackEvents();
-
-        do
-        {
-            #region Death Doors
-            if (DeathDoorEnterQueue.Count > 0)
-            {
-                if (RaidEvents.CampEvent.ActionType == CampUsageResultType.Skill)
-                    RaidEvents.CampEvent.Hide();
-
-                FMODUnity.RuntimeManager.PlayOneShot("event:/general/combat/deaths_door");
-                DarkestSoundManager.ExecuteNarration("deaths_door", NarrationPlace.Raid);
-
-                foreach (var deathDoorUnit in DeathDoorEnterQueue)
-                {
-                    if (deathDoorUnit.Character.AtDeathsDoor)
-                        Debug.LogError("Already at deaths door!");
-                    (deathDoorUnit.Character as Hero).ApplyDeathDoor();
-                    deathDoorUnit.Character.ApplySingleBuffRule(Rules.GetIdleUnitRules(deathDoorUnit), BuffRule.DeathsDoor);
-                    deathDoorUnit.SetHalo("deaths_door");
-                    deathDoorUnit.OverlaySlot.UpdateOverlay();
-                    DarkestDungeonManager.Data.Effects["BarkStress"].ApplyIndependent(deathDoorUnit);
-                }
-
-                string deathDoorHeroes = null;
-                switch (DeathDoorEnterQueue.Count)
-                {
-                    case 1:
-                        deathDoorHeroes = string.Format(LocalizationManager.GetString("str_party_members_1_death"),
-                            DeathDoorEnterQueue[0].Character.Name);
-                        break;
-                    case 2:
-                        deathDoorHeroes = string.Format(LocalizationManager.GetString("str_party_members_2_death"),
-                            DeathDoorEnterQueue[0].Character.Name, DeathDoorEnterQueue[1].Character.Name);
-                        break;
-                    case 3:
-                        deathDoorHeroes = string.Format(LocalizationManager.GetString("str_party_members_3_death"),
-                            DeathDoorEnterQueue[0].Character.Name, DeathDoorEnterQueue[1].Character.Name,
-                            DeathDoorEnterQueue[2].Character.Name);
-                        break;
-                    case 4:
-                        deathDoorHeroes = string.Format(LocalizationManager.GetString("str_party_members_4_death"),
-                            DeathDoorEnterQueue[0].Character.Name, DeathDoorEnterQueue[1].Character.Name,
-                            DeathDoorEnterQueue[2].Character.Name, DeathDoorEnterQueue[3].Character.Name);
-                        break;
-                    default:
-                        Debug.LogError("Too much deathdoors!");
-                        break;
-                }
-                if (DeathDoorEnterQueue.Count > 1)
-                    RaidEvents.ShowAnnouncment(string.Format(LocalizationManager.GetString("str_ui_deathdoor_multy"), deathDoorHeroes));
-                else
-                    RaidEvents.ShowAnnouncment(string.Format(LocalizationManager.GetString("str_ui_deathdoor"), deathDoorHeroes));
-
-                DeathDoorEnterQueue.Clear();
-                yield return new WaitForSeconds(1.6f);
-                RaidEvents.HideAnnouncment();
-            }
-            #endregion
-
-            #region Effects
-            do
-            {
-                executedEvent = false;
-                UnitEventQueue.Clear();
-                UnitEventQueue.AddRange(BattleGround.HeroParty.Units);
-                if (includeMonsters)
-                    UnitEventQueue.AddRange(BattleGround.MonsterParty.Units);
-
-                while (UnitEventQueue.Count > 0)
-                {
-                    var eventUnit = UnitEventQueue[0];
-                    UnitEventQueue.Remove(eventUnit);
-
-                    if (eventUnit != null && eventUnit.EventQueue.Count > 0)
-                    {
-                        var eventEffect = eventUnit.EventQueue[0];
-                        eventUnit.EventQueue.RemoveAt(0);
-
-                        eventEffect.Execute();
-                        executedEvent = true;
-                        if (eventEffect.SubEffect is StressEffect || eventEffect.SubEffect is StressHealEffect)
-                            yield return new WaitForSeconds(0.25f);
-
-                        if (eventUnit.CombatInfo.MarkedForDeath)
-                        {
-                            eventUnit.CombatInfo.IsDead = true;
-                            ExecuteDeath(eventUnit);
-                        }
-                    }
-                }
-
-                if (executedEvent)
-                    yield return new WaitForSeconds(1f);
-            } 
-            while (executedEvent);
-            #endregion
-
-            #region Resolve Checks
-            if (ResolveCheckQueue.Count != 0)
-            {
-                executedEvent = true;
-                if (RaidEvents.CampEvent.ActionType == CampUsageResultType.Skill)
-                    RaidEvents.CampEvent.Hide();
-                yield return StartCoroutine(ExecuteResolveChecks());
-            }
-            #endregion
-
-            #region Heart Attacks
-            while (HeartAttackCheckQueue.Count > 0)
-            {
-                executedEvent = true;
-                var heartAttackedUnit = HeartAttackCheckQueue[0];
-                HeartAttackCheckQueue.RemoveAt(0);
-
-                if (heartAttackedUnit.Character.AtDeathsDoor)
-                {
-                    heartAttackedUnit.CombatInfo.MarkedForDeath = true;
-                    PrepareDeath(heartAttackedUnit);
-                    RaidEvents.ShowPopupMessage(heartAttackedUnit, PopupMessageType.HeartAttack, "", 100);
-                    yield return new WaitForSeconds(0.2f);
-                    RaidEvents.ShowPopupMessage(heartAttackedUnit, PopupMessageType.DeathBlow);
-                    yield return new WaitForSeconds(1.2f);
-                    ExecuteDeath(heartAttackedUnit);
-                    yield return new WaitForSeconds(0.2f);
-                }
-                else
-                {
-                    RaidEvents.ShowPopupMessage(heartAttackedUnit, PopupMessageType.HeartAttack, "", 100);
-                    heartAttackedUnit.Character.TakeDamagePercent(1.0f);
-                    heartAttackedUnit.Character.Stress.ValueRatio = 0.75f;
-                    heartAttackedUnit.OverlaySlot.UpdateOverlay();
-                    yield return new WaitForSeconds(0.2f);
-                    DeathDoorEnterQueue.Add(heartAttackedUnit);
-                }
-            }
-            #endregion
-
-            if (DeathDoorEnterQueue.Count != 0 || ResolveCheckQueue.Count != 0 || HeartAttackCheckQueue.Count != 0)
-                executedEvent = true;
-        } 
-        while (executedEvent);
-
-        for (int i = 0; i < BattleGround.HeroParty.Units.Count; i++)
-            BattleGround.HeroParty.Units[i].Character.ApplyAllBuffRules(
-                Rules.GetIdleUnitRules(BattleGround.HeroParty.Units[i]));
-
-        if (waitAfter > 0.0f)
-            yield return new WaitForSeconds(waitAfter);
-
-        executingEffectEvent = false;
-    }
-
-    protected virtual IEnumerator ExecuteRandomDialog(FormationUnit unit, string dialogId)
+    private IEnumerator ExecuteRandomDialog(FormationUnit unit, string dialogId)
     {
         if (RandomSolver.CheckSuccess(DarkestDungeonManager.RandomBarkChance))
         {
@@ -5090,7 +4697,7 @@ public class RaidSceneManager : MonoBehaviour
                 RaidEvents.ShowPopupMessage(HeroParty.Units[i], PopupMessageType.Heal, mealHeal.ToString());
             }
 
-            yield return StartCoroutine(ExecuteEffectEvents(false));
+            yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(false));
             yield return new WaitForSeconds(0.6f);
 
             yield return ProcessRaidFailure();
@@ -5555,7 +5162,7 @@ public class RaidSceneManager : MonoBehaviour
                 else
                     effect.Apply(null, RaidPanel.SelectedUnit, BattleSolver.SkillResult);
 
-                yield return StartCoroutine(ExecuteEffectEvents(false));
+                yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(false));
                 #endregion
                 break;
             case "purge":
@@ -5613,7 +5220,7 @@ public class RaidSceneManager : MonoBehaviour
                         for (int i = 0; i < barkStressEffect.SubEffects.Count; i++)
                             barkStressEffect.SubEffects[i].Apply(heroBarker, interactorUnit, barkStressEffect);
                         yield return new WaitForSeconds(0.1f);
-                        yield return StartCoroutine(ExecuteEffectEvents(false));
+                        yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(false));
                         break;
                     }
                 }
@@ -5767,7 +5374,7 @@ public class RaidSceneManager : MonoBehaviour
         Formations.ShowHeroOverlay();
         raidTrap.gameObject.SetActive(false);
 
-        yield return StartCoroutine(ExecuteEffectEvents(false));
+        yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(false));
 
         if(Formations.Heroes.Party.Units.Contains(trapTarget))
             trapTarget.OverlaySlot.UpdateOverlay();
@@ -5791,7 +5398,7 @@ public class RaidSceneManager : MonoBehaviour
                         for (int i = 0; i < barkStressEffect.SubEffects.Count; i++)
                             barkStressEffect.SubEffects[i].Apply(heroBarker, trapTarget, barkStressEffect);
                         yield return new WaitForSeconds(0.1f);
-                        yield return StartCoroutine(ExecuteEffectEvents(false));
+                        yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(false));
                         break;
                     }
                 }
@@ -5870,7 +5477,7 @@ public class RaidSceneManager : MonoBehaviour
                 }
             }
             
-            yield return StartCoroutine(ExecuteEffectEvents(false));
+            yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(false));
             yield return ProcessRaidFailure();
         }
         else
@@ -6008,7 +5615,7 @@ public class RaidSceneManager : MonoBehaviour
         HeroParty.Units.ForEach(unit => ProcessDamage(unit, unit.Character.TakeDamagePercent(0.2f)));
         HeroParty.Units.ForEach(unit => DarkestDungeonManager.Data.Effects["Stress 2"].ApplyIndependent(unit));
         yield return StartCoroutine(ProcessHeroDeaths(0.6f, 0.8f, 0.3f));
-        yield return StartCoroutine(ExecuteEffectEvents(false, 0.3f));
+        yield return StartCoroutine(_effectEventsExecutor.ExecuteEffectEventsAsync(false, 0.3f));
         yield return ProcessRaidFailure();
     }
 
@@ -6056,13 +5663,13 @@ public class RaidSceneManager : MonoBehaviour
 
     #endregion
 
-    protected void CharacterWindowClosed()
+    private void CharacterWindowClosed()
     {
         if (BattleGround.BattleStatus != BattleStatus.Fighting)
             RaidPanel.UpdateSelection();
     }
 
-    protected void CharacterWindowNextButtonClicked()
+    private void CharacterWindowNextButtonClicked()
     {
         var formationUnit = HeroParty.Units.Find(unit => unit.Character == CharacterWindow.CurrentHero);
         
@@ -6077,7 +5684,7 @@ public class RaidSceneManager : MonoBehaviour
             HeroCharacterWindowOpened(HeroParty.Units[unitIndex].OverlaySlot);
     }
 
-    protected void CharacterWindowPreviousButtonClicked()
+    private void CharacterWindowPreviousButtonClicked()
     {
         var formationUnit = HeroParty.Units.Find(unit => unit.Character == CharacterWindow.CurrentHero);
         
